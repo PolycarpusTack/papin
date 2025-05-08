@@ -1,0 +1,93 @@
+{
+  "name": "translation-plugin",
+  "displayName": "Translation Plugin",
+  "version": "1.0.0",
+  "description": "Translate messages between different languages",
+  "author": "Claude MCP Team",
+  "license": "MIT",
+  "main": "translation-plugin.wasm",
+  "permissions": [
+    "conversations:read",
+    "conversations:write",
+    "network:translate-api.example.com"
+  ],
+  "hooks": [
+    "message:pre-process",
+    "message:post-process",
+    "conversation:create"
+  ],
+  "config": {
+    "settings": [
+      {
+        "name": "apiKey",
+        "type": "string",
+        "label": "API Key",
+        "description": "Your translation API key",
+        "default": "",
+        "secret": true
+      },
+      {
+        "name": "sourceLanguage",
+        "type": "string",
+        "label": "Source Language",
+        "description": "Default source language",
+        "default": "auto"
+      },
+      {
+        "name": "targetLanguage",
+        "type": "string",
+        "label": "Target Language",
+        "description": "Default target language",
+        "default": "en",
+        "enum_values": [
+          {
+            "value": "en",
+            "label": "English"
+          },
+          {
+            "value": "fr",
+            "label": "French"
+          },
+          {
+            "value": "es",
+            "label": "Spanish"
+          },
+          {
+            "value": "de",
+            "label": "German"
+          },
+          {
+            "value": "it",
+            "label": "Italian"
+          },
+          {
+            "value": "ja",
+            "label": "Japanese"
+          },
+          {
+            "value": "zh",
+            "label": "Chinese"
+          },
+          {
+            "value": "ru",
+            "label": "Russian"
+          }
+        ]
+      },
+      {
+        "name": "autoTranslate",
+        "type": "boolean",
+        "label": "Auto Translate",
+        "description": "Automatically translate incoming messages",
+        "default": false
+      },
+      {
+        "name": "showOriginal",
+        "type": "boolean",
+        "label": "Show Original",
+        "description": "Show original message alongside translation",
+        "default": true
+      }
+    ]
+  }
+}

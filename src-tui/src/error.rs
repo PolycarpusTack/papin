@@ -1,22 +1,24 @@
-use std::io;
-use mcp_common::error::McpError;
 use thiserror::Error;
 
-/// TUI application error types
-#[derive(Error, Debug)]
+/// Application error types
+#[derive(Debug, Error)]
 pub enum AppError {
-    #[error("I/O error: {0}")]
-    IoError(#[from] io::Error),
+    /// IO error
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
     
-    #[error("MCP error: {0}")]
-    McpError(#[from] McpError),
+    /// MCP service error
+    #[error("Service error: {0}")]
+    Service(String),
     
-    #[error("Parse error: {0}")]
-    ParseError(String),
-    
+    /// Application logic error
     #[error("Application error: {0}")]
-    AppError(String),
+    App(String),
 }
 
-/// Result type for the TUI application
-pub type AppResult<T> = Result<T, AppError>;
+/// Convert MCP error to AppError
+impl From<mcp_common::error::McpError> for AppError {
+    fn from(error: mcp_common::error::McpError) -> Self {
+        AppError::Service(error.to_string())
+    }
+}

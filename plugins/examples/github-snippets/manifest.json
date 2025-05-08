@@ -1,0 +1,73 @@
+{
+  "name": "github-snippets",
+  "displayName": "GitHub Code Snippets",
+  "version": "1.0.0",
+  "description": "Fetch code snippets from GitHub repositories",
+  "author": "Claude MCP Team",
+  "license": "MIT",
+  "main": "github-snippets.wasm",
+  "permissions": [
+    "conversations:read",
+    "conversations:write",
+    "network:github.com",
+    "network:api.github.com"
+  ],
+  "hooks": [
+    "message:pre-process",
+    "message:post-process"
+  ],
+  "config": {
+    "settings": [
+      {
+        "name": "githubToken",
+        "type": "string",
+        "label": "GitHub Token",
+        "description": "Your GitHub personal access token (optional)",
+        "default": "",
+        "secret": true
+      },
+      {
+        "name": "defaultBranch",
+        "type": "string",
+        "label": "Default Branch",
+        "description": "Default branch to use when not specified",
+        "default": "main"
+      },
+      {
+        "name": "codeBlockStyle",
+        "type": "string",
+        "label": "Code Block Style",
+        "description": "Style of code blocks",
+        "default": "github",
+        "enum_values": [
+          {
+            "value": "github",
+            "label": "GitHub Style"
+          },
+          {
+            "value": "simple",
+            "label": "Simple Style"
+          },
+          {
+            "value": "detailed",
+            "label": "Detailed Style"
+          }
+        ]
+      },
+      {
+        "name": "maxLineCount",
+        "type": "number",
+        "label": "Max Line Count",
+        "description": "Maximum number of lines to fetch",
+        "default": 100
+      },
+      {
+        "name": "includeMetadata",
+        "type": "boolean",
+        "label": "Include Metadata",
+        "description": "Include file metadata with code snippets",
+        "default": true
+      }
+    ]
+  }
+}

@@ -6,7 +6,7 @@ use clap::Parser;
 use log::LevelFilter;
 use std::sync::Arc;
 
-use commands::{Cli, Commands};
+use commands::{Cli, Commands, ModelCommands};
 use error::CliResult;
 use mcp_common::{get_mcp_service, init_mcp_service, service::ChatService};
 
@@ -67,6 +67,19 @@ async fn main() -> CliResult<()> {
         }
         Commands::Interactive { conversation_id } => {
             commands::interactive::run(chat_service, conversation_id).await?;
+        }
+        Commands::Model { command } => {
+            match command {
+                ModelCommands::List => {
+                    commands::model::list(chat_service).await?;
+                }
+                ModelCommands::SetDefault { model } => {
+                    commands::model::set_default(chat_service, &model).await?;
+                }
+                ModelCommands::SetForConversation { conversation_id, model } => {
+                    commands::model::set_for_conversation(chat_service, &conversation_id, &model).await?;
+                }
+            }
         }
     }
     

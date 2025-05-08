@@ -3,6 +3,7 @@ pub mod delete;
 pub mod export;
 pub mod interactive;
 pub mod list;
+pub mod model;
 pub mod new;
 pub mod setup;
 pub mod show;
@@ -103,5 +104,34 @@ pub enum Commands {
         /// Conversation ID (optional)
         #[arg(short, long)]
         conversation_id: Option<String>,
+    },
+    
+    /// Model management
+    Model {
+        /// Model subcommand
+        #[command(subcommand)]
+        command: ModelCommands,
+    },
+}
+
+/// Model subcommands
+#[derive(Subcommand)]
+pub enum ModelCommands {
+    /// List available models
+    List,
+    
+    /// Set default model for new conversations
+    SetDefault {
+        /// Model name
+        model: String,
+    },
+    
+    /// Set model for a conversation
+    SetForConversation {
+        /// Conversation ID
+        conversation_id: String,
+        
+        /// Model name
+        model: String,
     },
 }

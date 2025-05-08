@@ -1,6 +1,13 @@
-# Claude MCP Client for Linux
+# Claude MCP Client
 
-A fast, native Linux client for Claude MCP built with Tauri (Rust) and React, featuring a complete implementation of the Model Context Protocol (MCP) with intelligent model routing and offline capability.
+A fast, native client for Claude MCP built with Tauri (Rust) and React, featuring a complete implementation of the Model Context Protocol (MCP) with intelligent model routing and offline capability.
+
+This project includes three interfaces:
+1. A graphical desktop application (Tauri/React)
+2. A command-line interface (CLI)
+3. A terminal user interface (TUI)
+
+All three interfaces share the same core functionality through a common library.
 
 ## Features
 
@@ -11,8 +18,59 @@ A fast, native Linux client for Claude MCP built with Tauri (Rust) and React, fe
 - **Local model fallback** for offline operation
 - **Intelligent model router** for switching between cloud and local models
 - **Feature flag system** for granular control
-- **Lazy loading** of non-essential components
+- **Multiple interfaces** (GUI, CLI, TUI) with shared functionality
 - **Modern UI** with light/dark theme support
+
+## Components
+
+### Desktop Application (GUI)
+
+The primary graphical interface built with Tauri and React. Features include:
+
+- Fast-loading shell UI
+- Real-time streaming responses
+- Conversation management
+- Settings and configuration
+- Theme support
+- Local model integration
+
+See [src-tauri](src-tauri) and [src-frontend](src-frontend) for implementation details.
+
+### Command Line Interface (CLI)
+
+A powerful command-line tool for interacting with Claude models:
+
+- Complete command set
+- Interactive mode
+- Streaming response support
+- Piping and redirection support
+- Integration with other CLI tools
+
+See [src-cli](src-cli) for implementation details.
+
+### Text User Interface (TUI)
+
+A rich terminal-based UI for conversing with Claude:
+
+- Full-featured terminal interface
+- Keyboard navigation
+- Command mode
+- Real-time streaming
+- Conversation management
+
+See [src-tui](src-tui) for implementation details.
+
+### Common Library
+
+A shared library that provides functionality to all three interfaces:
+
+- MCP protocol implementation
+- Service layer for AI interactions
+- Data models
+- Configuration management
+- Offline support
+
+See [src-common](src-common) for implementation details.
 
 ## Architecture Overview
 
@@ -21,7 +79,8 @@ The application follows a layered architecture:
 ```
 ┌─────────────────────────────┐
 │                             │
-│ FRONTEND (React)            │
+│ INTERFACES                  │
+│ (GUI, CLI, TUI)             │
 │                             │
 └──────────────┬──────────────┘
                │
@@ -29,7 +88,7 @@ The application follows a layered architecture:
                │
 ┌──────────────▼──────────────┐
 │                             │
-│ COMMAND LAYER (Tauri)       │
+│ COMMAND LAYER (Tauri/CLI)   │
 │                             │
 └──────────────┬──────────────┘
                │
@@ -90,77 +149,46 @@ For offline operation, the client includes a local model system:
 
 The local models serve as fallbacks when Claude is unavailable, ensuring you can always get a response.
 
-## Project Structure
+## Installation
 
-The project is organized as follows:
+### Building from Source
 
-```
-claude-mcp/
-├── src/                     # Rust backend code
-│   ├── main.rs              # Tauri app entry point
-│   ├── shell_loader.rs      # Fast bootstrap loader
-│   ├── feature_flags.rs     # Feature flag system
-│   ├── ai/                  # AI integration components
-│   │   ├── claude/          # Claude provider implementation
-│   │   ├── local/           # Local model provider
-│   │   └── router/          # Model router implementation
-│   ├── models/              # Data models
-│   │   ├── mod.rs           # Base models
-│   │   └── messages.rs      # Message definitions
-│   ├── protocols/           # Protocol implementations
-│   │   ├── mod.rs           # Protocol abstractions
-│   │   └── mcp/             # MCP protocol implementation
-│   ├── services/            # Backend services
-│   │   ├── ai.rs            # AI service
-│   │   ├── api.rs           # API service
-│   │   ├── auth.rs          # Authentication service
-│   │   ├── chat.rs          # Chat service
-│   │   └── mcp.rs           # MCP service
-│   ├── commands/            # Tauri commands
-│   │   ├── ai.rs            # AI commands
-│   │   ├── auth.rs          # Auth commands
-│   │   ├── chat.rs          # Chat commands
-│   │   └── mcp.rs           # MCP commands
-│   └── utils/               # Utility functions
-│       ├── config.rs        # Configuration management
-│       ├── events.rs        # Event system
-│       └── lazy_loader.rs   # Lazy loading implementation
-├── src-tauri/               # Tauri configuration
-├── src-frontend/            # React frontend
-    ├── src/
-    │   ├── main.tsx         # React entry point
-    │   ├── App.tsx          # Main React component
-    │   ├── components/      # UI components
-    │   └── lazy/            # Lazy-loaded components
+1. Clone the repository:
+   ```
+   git clone https://github.com/your-username/claude-mcp.git
+   cd claude-mcp
+   ```
+
+2. Build all components:
+   ```
+   make build-all
+   ```
+
+3. Install binaries (optional):
+   ```
+   make install-all
+   ```
+
+### Individual Components
+
+You can build and install individual components:
+
+```bash
+# Build and install CLI
+make build-cli
+make install-cli
+
+# Build and install TUI
+make build-tui
+make install-tui
+
+# Build GUI
+make build-gui
 ```
 
-## Model Context Protocol (MCP)
+### Using Pre-built Binaries
 
-The client implements the complete Model Context Protocol for communicating with AI models over WebSockets:
-
-- **Real-time communication** with Anthropic's Claude models
-- **Message streaming** for faster responses
-- **Bi-directional protocol** supporting request-response and events
-- **Efficient serialization** for minimal latency
-- **Reconnection handling** for resilient connections
-- **Authentication** with API key and session management
-
-For detailed information on the MCP implementation, see [MCP_README.md](MCP_README.md).
-
-## Fast Startup Architecture
-
-This project implements a multi-stage loading process to achieve <500ms startup time:
-
-1. **Shell Loading** (~20ms): Initial minimal UI frame
-2. **Shell Ready** (~100ms): Basic UI visible to user
-3. **Core Services** (~200ms): Essential backend services initialized
-4. **Secondary Loading**: Non-essential components loaded in background
-
-The architecture uses a combination of techniques:
-- Lightweight shell UI that loads first
-- Lazy loading of non-essential components
-- Feature flags to control what gets loaded
-- Optimized build configuration for small initial bundle
+Download the appropriate binaries for your platform from the [Releases](https://github.com/your-username/claude-mcp/releases) page.
 
 ## Development Setup
 
@@ -171,46 +199,31 @@ The architecture uses a combination of techniques:
 - npm or yarn
 - An Anthropic API key
 
-### Installation
+### Configuration
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/your-username/claude-mcp.git
-   cd claude-mcp
-   ```
+Create a config file at one of these locations:
+- Linux: `~/.config/mcp/config.json`
+- macOS: `~/Library/Application Support/mcp/config.json`
+- Windows: `%APPDATA%\mcp\config.json`
 
-2. Install dependencies:
-   ```
-   # Install frontend dependencies
-   cd src-frontend
-   npm install
-   
-   # Return to root and install Rust dependencies
-   cd ..
-   cargo build
-   ```
+With the following content:
 
-3. Configure your API key:
-   ```
-   # Create a config directory
-   mkdir -p ~/.config/claude-mcp
-   
-   # Create a config file (replace YOUR_API_KEY with your actual API key)
-   echo '{"api": {"key": "YOUR_API_KEY"}}' > ~/.config/claude-mcp/config.json
-   ```
-
-4. Run the development version:
-   ```
-   npm run tauri dev
-   ```
-
-### Building for Production
-
-```
-npm run tauri build
+```json
+{
+  "api": {
+    "key": "YOUR_API_KEY"
+  },
+  "model": {
+    "default": "claude-3-opus-20240229"
+  }
+}
 ```
 
-This will create optimized production builds in the `src-tauri/target/release` directory.
+Or run the setup command:
+
+```bash
+mcp setup
+```
 
 ## Feature Flag System
 
@@ -225,22 +238,9 @@ The application uses a feature flag system to enable/disable functionality:
 - `ANALYTICS`: Enable analytics and telemetry
 - `AUTO_UPDATE`: Enable auto-updates
 
-You can control these features:
-- At build time through Cargo features
-- At runtime through environment variables
-- Through the config file
-
 ## Project Status
 
 For a detailed overview of the current project status, see [PROJECT_STATUS.md](PROJECT_STATUS.md).
-
-## Cross-Platform Considerations
-
-Although this project is primarily designed for Linux, the code is structured to be cross-platform compatible. When pushing to GitHub and pulling on your Linux server:
-
-1. Make sure to run `cargo update` to update dependencies for the Linux environment
-2. Check for any platform-specific path issues in the config paths
-3. Use the appropriate build targets when building on Linux (`deb` and `appimage`)
 
 ## License
 

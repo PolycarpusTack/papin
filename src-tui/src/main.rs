@@ -20,7 +20,8 @@ use event::{Event, EventHandler};
 use mcp_common::{get_mcp_service, init_mcp_service, service::ChatService};
 
 // Entry point
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     // Initialize logging
     env_logger::init();
     
@@ -37,7 +38,7 @@ fn main() -> Result<()> {
     
     // Create app and run it
     let app = App::new(chat_service);
-    let res = run_app(&mut terminal, app);
+    let res = run_app(&mut terminal, app).await;
     
     // Restore terminal
     disable_raw_mode()?;
@@ -57,7 +58,7 @@ fn main() -> Result<()> {
 }
 
 // Run the application
-fn run_app<B: ratatui::backend::Backend>(
+async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,
 ) -> AppResult<()> {

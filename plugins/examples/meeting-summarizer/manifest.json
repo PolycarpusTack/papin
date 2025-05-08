@@ -1,0 +1,71 @@
+{
+  "name": "meeting-summarizer",
+  "displayName": "Meeting Summarizer",
+  "version": "1.0.0",
+  "description": "Generate structured summaries from meeting transcripts",
+  "author": "Claude MCP Team",
+  "license": "MIT",
+  "main": "meeting-summarizer.wasm",
+  "permissions": [
+    "conversations:read",
+    "conversations:write",
+    "models:use"
+  ],
+  "hooks": [
+    "message:pre-process",
+    "conversation:create"
+  ],
+  "config": {
+    "settings": [
+      {
+        "name": "summaryFormat",
+        "type": "string",
+        "label": "Summary Format",
+        "description": "Format of the generated meeting summary",
+        "default": "detailed",
+        "enum_values": [
+          {
+            "value": "detailed",
+            "label": "Detailed"
+          },
+          {
+            "value": "concise",
+            "label": "Concise"
+          },
+          {
+            "value": "bullet",
+            "label": "Bullet Points"
+          }
+        ]
+      },
+      {
+        "name": "includeActionItems",
+        "type": "boolean",
+        "label": "Include Action Items",
+        "description": "Extract and include action items in summary",
+        "default": true
+      },
+      {
+        "name": "includeDecisions",
+        "type": "boolean",
+        "label": "Include Decisions",
+        "description": "Extract and include decisions in summary",
+        "default": true
+      },
+      {
+        "name": "includeParticipants",
+        "type": "boolean",
+        "label": "Include Participants",
+        "description": "Extract and include participants in summary",
+        "default": true
+      },
+      {
+        "name": "autoSummarize",
+        "type": "boolean",
+        "label": "Auto Summarize",
+        "description": "Automatically detect and summarize meeting transcripts",
+        "default": false
+      }
+    ]
+  }
+}
