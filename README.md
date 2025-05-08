@@ -1,6 +1,6 @@
 # Claude MCP Client for Linux
 
-A fast, native Linux client for Claude MCP built with Tauri (Rust) and React, featuring a complete implementation of the Model Context Protocol (MCP).
+A fast, native Linux client for Claude MCP built with Tauri (Rust) and React, featuring a complete implementation of the Model Context Protocol (MCP) with intelligent model routing and offline capability.
 
 ## Features
 
@@ -8,9 +8,87 @@ A fast, native Linux client for Claude MCP built with Tauri (Rust) and React, fe
 - **Model Context Protocol** implementation for real-time AI communication
 - **Native performance** through Tauri/Rust backend
 - **WebSocket streaming** for real-time responses
+- **Local model fallback** for offline operation
+- **Intelligent model router** for switching between cloud and local models
 - **Feature flag system** for granular control
 - **Lazy loading** of non-essential components
 - **Modern UI** with light/dark theme support
+
+## Architecture Overview
+
+The application follows a layered architecture:
+
+```
+┌─────────────────────────────┐
+│                             │
+│ FRONTEND (React)            │
+│                             │
+└──────────────┬──────────────┘
+               │
+               │ Commands/Events
+               │
+┌──────────────▼──────────────┐
+│                             │
+│ COMMAND LAYER (Tauri)       │
+│                             │
+└──────────────┬──────────────┘
+               │
+               │ Service API
+               │
+┌──────────────▼──────────────┐
+│                             │
+│ SERVICE LAYER               │
+│ (AI, Chat, Auth Services)   │
+│                             │
+└──────────────┬──────────────┘
+               │
+               │ Provider API
+               │
+┌──────────────▼──────────────┐
+│                             │
+│ PROVIDER LAYER              │
+│ (Claude, Local Providers)   │
+│                             │
+└──────────────┬──────────────┘
+               │
+               │ Protocol API
+               │
+┌──────────────▼──────────────┐
+│                             │
+│ PROTOCOL LAYER              │
+│ (MCP, REST, WebSocket)      │
+│                             │
+└─────────────────────────────┘
+```
+
+## Claude AI Integration
+
+The client provides a sophisticated integration with Claude AI:
+
+- **Multiple API Options**:
+  - WebSocket-based Model Context Protocol (MCP)
+  - RESTful API with streaming support
+  - Automatic fallback between protocols
+
+- **Real-time Streaming**: Message tokens are streamed in real-time for faster user experience
+
+- **Offline Operation**: Automatically switches to local models when network is unavailable
+
+- **Model Router**: Intelligent routing between Claude cloud models and local models based on:
+  - Network availability
+  - Configuration preferences
+  - Custom routing rules
+
+## Local Model Support
+
+For offline operation, the client includes a local model system:
+
+- **Local Inference**: Run small language models directly on your device
+- **Model Management**: Automatic download and management of models
+- **Streaming Generation**: Real-time token streaming for local models
+- **Low Resource Usage**: Optimized for running on standard hardware
+
+The local models serve as fallbacks when Claude is unavailable, ensuring you can always get a response.
 
 ## Project Structure
 
@@ -22,6 +100,10 @@ claude-mcp/
 │   ├── main.rs              # Tauri app entry point
 │   ├── shell_loader.rs      # Fast bootstrap loader
 │   ├── feature_flags.rs     # Feature flag system
+│   ├── ai/                  # AI integration components
+│   │   ├── claude/          # Claude provider implementation
+│   │   ├── local/           # Local model provider
+│   │   └── router/          # Model router implementation
 │   ├── models/              # Data models
 │   │   ├── mod.rs           # Base models
 │   │   └── messages.rs      # Message definitions
@@ -29,11 +111,13 @@ claude-mcp/
 │   │   ├── mod.rs           # Protocol abstractions
 │   │   └── mcp/             # MCP protocol implementation
 │   ├── services/            # Backend services
+│   │   ├── ai.rs            # AI service
 │   │   ├── api.rs           # API service
 │   │   ├── auth.rs          # Authentication service
 │   │   ├── chat.rs          # Chat service
 │   │   └── mcp.rs           # MCP service
 │   ├── commands/            # Tauri commands
+│   │   ├── ai.rs            # AI commands
 │   │   ├── auth.rs          # Auth commands
 │   │   ├── chat.rs          # Chat commands
 │   │   └── mcp.rs           # MCP commands
@@ -145,6 +229,10 @@ You can control these features:
 - At build time through Cargo features
 - At runtime through environment variables
 - Through the config file
+
+## Project Status
+
+For a detailed overview of the current project status, see [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
 ## Cross-Platform Considerations
 

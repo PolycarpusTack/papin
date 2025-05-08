@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod auth;
 pub mod chat;
 pub mod mcp;
@@ -27,5 +28,15 @@ pub fn register_commands(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
             mcp::connect,
             mcp::disconnect,
             mcp::get_connection_status,
+            
+            // AI commands
+            ai::get_available_models,
+            ai::set_network_status,
+            ai::send_message,
+            ai::stream_message,
+            ai::cancel_streaming,
+            ai::get_messages,
+            ai::create_conversation,
+            ai::delete_conversation,
         ])
 }
