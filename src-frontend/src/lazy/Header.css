@@ -1,0 +1,121 @@
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+  padding: 0 var(--spacing-md);
+  background-color: var(--background-alt);
+  border-bottom: 1px solid rgba(205, 214, 244, 0.1);
+  z-index: var(--z-index-header);
+}
+
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.header-icon {
+  width: 32px;
+  height: 32px;
+  background-color: var(--primary);
+  border-radius: 8px;
+  position: relative;
+}
+
+.header-icon::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background-color: var(--background-alt);
+  border-radius: 4px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.header-logo h1 {
+  font-size: var(--font-size-lg);
+  margin: 0;
+}
+
+.header-nav {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.nav-item {
+  background: transparent;
+  border: none;
+  color: var(--foreground-alt);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-item:hover {
+  color: var(--foreground);
+  background-color: rgba(205, 214, 244, 0.05);
+}
+
+.nav-item.active {
+  color: var(--primary);
+  background-color: rgba(114, 135, 253, 0.15);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.action-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(205, 214, 244, 0.1);
+  color: var(--foreground);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.action-button:hover {
+  background-color: rgba(205, 214, 244, 0.2);
+}
+
+.user-menu {
+  cursor: pointer;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--secondary);
+}
+
+/* System light theme support */
+@media (prefers-color-scheme: light) {
+  .app-header {
+    border-bottom-color: rgba(76, 79, 105, 0.1);
+  }
+  
+  .nav-item:hover {
+    background-color: rgba(76, 79, 105, 0.05);
+  }
+  
+  .action-button {
+    background-color: rgba(76, 79, 105, 0.1);
+  }
+  
+  .action-button:hover {
+    background-color: rgba(76, 79, 105, 0.2);
+  }
+}

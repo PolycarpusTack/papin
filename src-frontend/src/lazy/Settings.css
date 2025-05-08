@@ -1,0 +1,219 @@
+.settings-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
+.settings-section {
+  margin-bottom: var(--spacing-xl);
+  background-color: var(--background-alt);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-lg);
+}
+
+.settings-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+}
+
+.info-label {
+  flex: 0 0 100px;
+  font-weight: 500;
+}
+
+.info-value {
+  color: var(--foreground-alt);
+}
+
+.feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.feature-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--border-radius-sm);
+  border: 2px solid var(--foreground-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.feature-checkbox.checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.feature-checkbox.checked::after {
+  content: '';
+  width: 6px;
+  height: 10px;
+  border: solid var(--background);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  position: absolute;
+  top: 2px;
+}
+
+.feature-name {
+  text-transform: capitalize;
+}
+
+.theme-selector {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background-color: rgba(205, 214, 244, 0.1);
+  border: 2px solid transparent;
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.theme-option:hover {
+  background-color: rgba(205, 214, 244, 0.15);
+}
+
+.theme-option.active {
+  border-color: var(--primary);
+  background-color: rgba(114, 135, 253, 0.15);
+}
+
+.theme-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.theme-name {
+  font-size: var(--font-size-sm);
+}
+
+.form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: var(--spacing-sm);
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: var(--spacing-md);
+  background-color: rgba(205, 214, 244, 0.1);
+  border: 1px solid rgba(205, 214, 244, 0.2);
+  border-radius: var(--border-radius);
+  color: var(--foreground);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.settings-footer {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  margin-top: var(--spacing-xl);
+}
+
+.settings-button {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--border-radius);
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.settings-button.primary {
+  background-color: var(--primary);
+  color: var(--background);
+}
+
+.settings-button.primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.settings-button.secondary {
+  background-color: transparent;
+  border: 1px solid var(--foreground-alt);
+  color: var(--foreground);
+}
+
+.settings-button.secondary:hover {
+  background-color: rgba(205, 214, 244, 0.05);
+}
+
+.settings-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(114, 135, 253, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--primary);
+  animation: spin 1s linear infinite;
+  margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* System light theme support */
+@media (prefers-color-scheme: light) {
+  .theme-option {
+    background-color: rgba(76, 79, 105, 0.1);
+  }
+  
+  .theme-option:hover {
+    background-color: rgba(76, 79, 105, 0.15);
+  }
+  
+  .form-group input,
+  .form-group select {
+    background-color: rgba(76, 79, 105, 0.05);
+    border-color: rgba(76, 79, 105, 0.2);
+  }
+  
+  .settings-button.secondary:hover {
+    background-color: rgba(76, 79, 105, 0.05);
+  }
+}

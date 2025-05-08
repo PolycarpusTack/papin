@@ -1,0 +1,46 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: #1e1e2e;
+  color: #cdd6f4;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  position: relative;
+}
+
+.loading-component {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background-color: rgba(30, 30, 46, 0.5);
+  color: #cdd6f4;
+  font-size: 0.9rem;
+}
+
+/* System light theme support */
+@media (prefers-color-scheme: light) {
+  .app {
+    background-color: #f5f5fa;
+    color: #11111b;
+  }
+  
+  .loading-component {
+    background-color: rgba(245, 245, 250, 0.5);
+    color: #11111b;
+  }
+}

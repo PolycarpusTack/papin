@@ -1,0 +1,119 @@
+:root {
+  /* Base colors - will be used by components */
+  --background: #1e1e2e;
+  --background-alt: #181825;
+  --foreground: #cdd6f4;
+  --foreground-alt: #a6adc8;
+  --primary: #7287fd;
+  --primary-hover: #8599ff;
+  --secondary: #fab387;
+  --accent: #f5c2e7;
+  --error: #f38ba8;
+  --success: #a6e3a1;
+  --warning: #f9e2af;
+  --info: #89dceb;
+  
+  /* Structural variables */
+  --border-radius: 8px;
+  --border-radius-sm: 4px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* Font settings */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-size: 16px;
+  --font-size-sm: 14px;
+  --font-size-xs: 12px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  
+  /* Z-index layers */
+  --z-index-shell: 1000;
+  --z-index-modal: 900;
+  --z-index-dropdown: 800;
+  --z-index-header: 700;
+  --z-index-tooltip: 600;
+}
+
+/* Light theme variables */
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #f5f5fa;
+    --background-alt: #e6e6ef;
+    --foreground: #11111b;
+    --foreground-alt: #4c4f69;
+    --primary: #7287fd;
+    --primary-hover: #5b6abf;
+    --secondary: #fe640b;
+  }
+}
+
+/* Base reset styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  background-color: var(--background);
+  color: var(--foreground);
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h1 {
+  font-size: var(--font-size-xl);
+}
+
+h2 {
+  font-size: var(--font-size-lg);
+}
+
+/* Basic button style */
+button {
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  cursor: pointer;
+}
+
+/* Focus handling */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Simple animation for lazy-loaded components */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

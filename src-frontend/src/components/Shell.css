@@ -1,0 +1,189 @@
+/* 
+ * Shell.css
+ * Minimal styling for the initial shell component
+ * Optimized for fast rendering (<500ms)
+ */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  width: 100vw;
+  background-color: #1e1e2e;
+  color: #cdd6f4;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.shell-loading {
+  transition: opacity 0.5s ease-out;
+}
+
+.shell-error {
+  background-color: #2a1a22;
+}
+
+.logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.app-icon {
+  width: 80px;
+  height: 80px;
+  background-color: #7287fd;
+  border-radius: 16px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.icon-inner {
+  width: 50%;
+  height: 50%;
+  background-color: #1e1e2e;
+  border-radius: 8px;
+}
+
+.logo-container h1 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin: 0;
+  color: #cdd6f4;
+}
+
+.loading-indicator {
+  width: 280px;
+  margin-bottom: 2rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 4px;
+  background-color: #313244;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #7287fd;
+  border-radius: 2px;
+  transition: width 0.3s ease-in-out;
+}
+
+.loading-text {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #a6adc8;
+}
+
+.version-info {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  font-size: 0.8rem;
+  color: #6c7086;
+}
+
+.error-container {
+  max-width: 500px;
+  padding: 2rem;
+  background-color: #45283c;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.error-container h2 {
+  color: #f38ba8;
+  margin-top: 0;
+}
+
+.error-container p {
+  margin: 1rem 0;
+  color: #f2cdcd;
+  white-space: pre-wrap;
+  text-align: left;
+  font-family: monospace;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 1rem;
+  border-radius: 4px;
+  overflow: auto;
+  max-height: 200px;
+}
+
+.error-container button {
+  background-color: #f38ba8;
+  color: #1e1e2e;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.error-container button:hover {
+  background-color: #f5a9b8;
+}
+
+/* System light theme support */
+@media (prefers-color-scheme: light) {
+  .shell {
+    background-color: #f5f5fa;
+    color: #11111b;
+  }
+  
+  .shell-error {
+    background-color: #f9e2e2;
+  }
+  
+  .app-icon {
+    background-color: #7287fd;
+  }
+  
+  .icon-inner {
+    background-color: #f5f5fa;
+  }
+  
+  .logo-container h1 {
+    color: #11111b;
+  }
+  
+  .progress-bar {
+    background-color: #dce0ee;
+  }
+  
+  .loading-text {
+    color: #45475a;
+  }
+  
+  .version-info {
+    color: #7c7f93;
+  }
+  
+  .error-container {
+    background-color: #f9dadc;
+  }
+  
+  .error-container h2 {
+    color: #d20f39;
+  }
+  
+  .error-container p {
+    color: #4c4f69;
+    background-color: rgba(255, 255, 255, 0.5);
+  }
+}
