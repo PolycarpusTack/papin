@@ -1,11 +1,13 @@
 # Claude MCP Client for Linux
 
-A fast, native Linux client for Claude MCP built with Tauri (Rust) and React.
+A fast, native Linux client for Claude MCP built with Tauri (Rust) and React, featuring a complete implementation of the Model Context Protocol (MCP).
 
 ## Features
 
 - **Ultra-fast startup** (<500ms to visible UI)
+- **Model Context Protocol** implementation for real-time AI communication
 - **Native performance** through Tauri/Rust backend
+- **WebSocket streaming** for real-time responses
 - **Feature flag system** for granular control
 - **Lazy loading** of non-essential components
 - **Modern UI** with light/dark theme support
@@ -21,8 +23,24 @@ claude-mcp/
 │   ├── shell_loader.rs      # Fast bootstrap loader
 │   ├── feature_flags.rs     # Feature flag system
 │   ├── models/              # Data models
+│   │   ├── mod.rs           # Base models
+│   │   └── messages.rs      # Message definitions
+│   ├── protocols/           # Protocol implementations
+│   │   ├── mod.rs           # Protocol abstractions
+│   │   └── mcp/             # MCP protocol implementation
 │   ├── services/            # Backend services
+│   │   ├── api.rs           # API service
+│   │   ├── auth.rs          # Authentication service
+│   │   ├── chat.rs          # Chat service
+│   │   └── mcp.rs           # MCP service
+│   ├── commands/            # Tauri commands
+│   │   ├── auth.rs          # Auth commands
+│   │   ├── chat.rs          # Chat commands
+│   │   └── mcp.rs           # MCP commands
 │   └── utils/               # Utility functions
+│       ├── config.rs        # Configuration management
+│       ├── events.rs        # Event system
+│       └── lazy_loader.rs   # Lazy loading implementation
 ├── src-tauri/               # Tauri configuration
 ├── src-frontend/            # React frontend
     ├── src/
@@ -31,6 +49,19 @@ claude-mcp/
     │   ├── components/      # UI components
     │   └── lazy/            # Lazy-loaded components
 ```
+
+## Model Context Protocol (MCP)
+
+The client implements the complete Model Context Protocol for communicating with AI models over WebSockets:
+
+- **Real-time communication** with Anthropic's Claude models
+- **Message streaming** for faster responses
+- **Bi-directional protocol** supporting request-response and events
+- **Efficient serialization** for minimal latency
+- **Reconnection handling** for resilient connections
+- **Authentication** with API key and session management
+
+For detailed information on the MCP implementation, see [MCP_README.md](MCP_README.md).
 
 ## Fast Startup Architecture
 
@@ -54,12 +85,13 @@ The architecture uses a combination of techniques:
 - Rust (1.62+)
 - Node.js (16+)
 - npm or yarn
+- An Anthropic API key
 
 ### Installation
 
 1. Clone the repository:
    ```
-   git clone https://github.com/your-org/claude-mcp.git
+   git clone https://github.com/your-username/claude-mcp.git
    cd claude-mcp
    ```
 
@@ -74,7 +106,16 @@ The architecture uses a combination of techniques:
    cargo build
    ```
 
-3. Run the development version:
+3. Configure your API key:
+   ```
+   # Create a config directory
+   mkdir -p ~/.config/claude-mcp
+   
+   # Create a config file (replace YOUR_API_KEY with your actual API key)
+   echo '{"api": {"key": "YOUR_API_KEY"}}' > ~/.config/claude-mcp/config.json
+   ```
+
+4. Run the development version:
    ```
    npm run tauri dev
    ```
@@ -115,4 +156,4 @@ Although this project is primarily designed for Linux, the code is structured to
 
 ## License
 
-[MIT License](LICENSE)# papin
+[MIT License](LICENSE)

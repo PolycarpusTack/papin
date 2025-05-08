@@ -6,6 +6,7 @@
 mod commands;
 mod feature_flags;
 mod models;
+mod protocols;
 mod services;
 mod shell_loader;
 mod utils;
@@ -98,7 +99,12 @@ fn main() {
     let config = Config::global();
     
     // Build Tauri application
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    
+    // Register commands
+    builder = commands::register_commands(builder);
+    
+    builder
         .setup(|app| {
             // Get the main window or create it
             let window = app.get_window("main").unwrap_or_else(|| {
