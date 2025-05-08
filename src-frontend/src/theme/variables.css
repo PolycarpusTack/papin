@@ -1,0 +1,104 @@
+:root {
+  /* Base colors - light theme default */
+  --color-primary: #7963d2;
+  --color-primary-light: #9883e6;
+  --color-primary-dark: #5946a9;
+  
+  --color-secondary: #4a8cfa;
+  --color-secondary-light: #72a9ff;
+  --color-secondary-dark: #2a6cd8;
+  
+  --color-success: #34c759;
+  --color-warning: #ffcc00;
+  --color-error: #ff3b30;
+  --color-info: #5ac8fa;
+  
+  /* UI color scheme - light mode */
+  --color-background: #ffffff;
+  --color-surface: #f8f9fa;
+  --color-surface-variant: #f0f1f4;
+  
+  --color-on-background: #1c1c1e;
+  --color-on-surface: #2c2c2e;
+  --color-on-surface-variant: #6c6c70;
+  
+  --color-border: #e6e6e6;
+  --color-divider: #ebebeb;
+  
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  
+  --font-size-xs: 0.75rem;   /* 12px */
+  --font-size-sm: 0.875rem;  /* 14px */
+  --font-size-md: 1rem;      /* 16px */
+  --font-size-lg: 1.125rem;  /* 18px */
+  --font-size-xl: 1.25rem;   /* 20px */
+  --font-size-2xl: 1.5rem;   /* 24px */
+  --font-size-3xl: 1.875rem; /* 30px */
+  
+  /* Spacing */
+  --spacing-xxs: 0.25rem;  /* 4px */
+  --spacing-xs: 0.5rem;    /* 8px */
+  --spacing-sm: 0.75rem;   /* 12px */
+  --spacing-md: 1rem;      /* 16px */
+  --spacing-lg: 1.5rem;    /* 24px */
+  --spacing-xl: 2rem;      /* 32px */
+  --spacing-2xl: 2.5rem;   /* 40px */
+  --spacing-3xl: 3rem;     /* 48px */
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.05);
+  
+  /* Border Radius */
+  --radius-sm: 0.25rem;  /* 4px */
+  --radius-md: 0.5rem;   /* 8px */
+  --radius-lg: 0.75rem;  /* 12px */
+  --radius-xl: 1rem;     /* 16px */
+  --radius-full: 9999px;
+  
+  /* Transition */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+  
+  /* Z-index layers */
+  --z-below: -1;
+  --z-normal: 1;
+  --z-overlay: 10;
+  --z-dropdown: 20;
+  --z-sticky: 30;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-tooltip: 60;
+}
+
+/* Dark theme */
+:root.dark-theme {
+  --color-primary: #8b7de0;
+  --color-primary-light: #a99df1;
+  --color-primary-dark: #6c5dc8;
+  
+  --color-secondary: #5c9aff;
+  --color-secondary-light: #81b3ff;
+  --color-secondary-dark: #4080e6;
+  
+  /* Dark mode UI colors */
+  --color-background: #1c1c1e;
+  --color-surface: #2c2c2e;
+  --color-surface-variant: #3a3a3c;
+  
+  --color-on-background: #f2f2f7;
+  --color-on-surface: #e5e5ea;
+  --color-on-surface-variant: #aeaeb2;
+  
+  --color-border: #3a3a3c;
+  --color-divider: #444446;
+  
+  /* Adjust shadows for dark mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.2);
+}

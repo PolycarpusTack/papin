@@ -1,4 +1,6 @@
 import React from 'react';
+import ThemeToggle from '../theme/ThemeToggle';
+import useCommandPalette from '../hooks/useCommandPalette';
 import './Header.css';
 
 interface HeaderProps {
@@ -7,35 +9,40 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => {
+  const { open: openCommandPalette } = useCommandPalette();
+  
   return (
-    <header className="app-header fade-in">
-      <div className="header-logo">
-        <div className="header-icon"></div>
-        <h1>Claude MCP</h1>
+    <header className="app-header">
+      <div className="header-left">
+        <div className="app-logo">
+          <div className="logo-icon"></div>
+          <span className="logo-text">Claude MCP</span>
+        </div>
+        
+        <nav className="main-nav">
+          <button 
+            className={`nav-item ${currentView === 'chat' ? 'active' : ''}`} 
+            onClick={() => onViewChange('chat')}
+          >
+            Chat
+          </button>
+          <button 
+            className={`nav-item ${currentView === 'settings' ? 'active' : ''}`} 
+            onClick={() => onViewChange('settings')}
+          >
+            Settings
+          </button>
+        </nav>
       </div>
       
-      <nav className="header-nav">
-        <button 
-          className={`nav-item ${currentView === 'chat' ? 'active' : ''}`}
-          onClick={() => onViewChange('chat')}
-        >
-          Chat
+      <div className="header-right">
+        <button className="command-palette-button" onClick={openCommandPalette}>
+          <span className="command-icon">⌘</span>
+          <span>Command Palette</span>
+          <kbd className="keyboard-shortcut">Ctrl+K</kbd>
         </button>
-        <button 
-          className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
-          onClick={() => onViewChange('settings')}
-        >
-          Settings
-        </button>
-      </nav>
-      
-      <div className="header-actions">
-        <button className="action-button" title="Help">
-          ?
-        </button>
-        <div className="user-menu">
-          <div className="user-avatar"></div>
-        </div>
+        
+        <ThemeToggle />
       </div>
     </header>
   );

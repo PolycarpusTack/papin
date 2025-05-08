@@ -1,0 +1,178 @@
+.keyboard-shortcuts-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  animation: fadeIn var(--animation-duration-fast) var(--animation-easing-standard);
+}
+
+.keyboard-shortcuts-dialog {
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn var(--animation-duration-normal) var(--animation-easing-spring);
+}
+
+.keyboard-shortcuts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.keyboard-shortcuts-header h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  color: var(--color-on-surface);
+}
+
+.keyboard-shortcuts-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  color: var(--color-on-surface-variant);
+  transition: color var(--animation-duration-fast) var(--animation-easing-standard);
+}
+
+.keyboard-shortcuts-close:hover {
+  color: var(--color-on-surface);
+}
+
+.keyboard-shortcuts-content {
+  padding: var(--spacing-md) var(--spacing-lg);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.keyboard-shortcuts-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.keyboard-shortcuts-section:last-child {
+  margin-bottom: 0;
+}
+
+.keyboard-shortcuts-scope {
+  font-size: var(--font-size-lg);
+  margin: 0 0 var(--spacing-sm) 0;
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-on-surface);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.keyboard-shortcuts-active-tag {
+  font-size: var(--font-size-xs);
+  background-color: var(--color-primary);
+  color: white;
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-weight: normal;
+}
+
+.keyboard-shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.keyboard-shortcuts-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.keyboard-shortcuts-item:last-child {
+  border-bottom: none;
+}
+
+.keyboard-shortcuts-description {
+  font-size: var(--font-size-md);
+  color: var(--color-on-surface);
+}
+
+.keyboard-shortcuts-keys {
+  font-size: var(--font-size-sm);
+}
+
+.keyboard-shortcuts-keys kbd {
+  display: inline-block;
+  padding: var(--spacing-xxs) var(--spacing-xs);
+  font-family: var(--font-family);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 0 var(--color-border);
+  background-color: var(--color-surface-variant);
+  color: var(--color-on-surface);
+}
+
+.keyboard-shortcuts-footer {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  color: var(--color-on-surface-variant);
+  font-size: var(--font-size-sm);
+}
+
+.keyboard-shortcuts-footer kbd {
+  display: inline-block;
+  padding: 2px var(--spacing-xs);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 0 var(--color-border);
+  background-color: var(--color-surface-variant);
+  color: var(--color-on-surface);
+}
+
+.keyboard-focus-outline:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Visual indicator for keyboard navigation */
+.keyboard-focus-outline:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.keyboard-navigation-indicator {
+  position: fixed;
+  bottom: var(--spacing-md);
+  right: var(--spacing-md);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-on-surface-variant);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity var(--animation-duration-normal) var(--animation-easing-standard),
+              transform var(--animation-duration-normal) var(--animation-easing-standard);
+}
+
+.keyboard-navigation-indicator.active {
+  opacity: 1;
+  transform: translateY(0);
+}

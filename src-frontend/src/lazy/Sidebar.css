@@ -1,8 +1,8 @@
 .sidebar {
   width: 280px;
   height: 100%;
-  background-color: var(--background-alt);
-  border-right: 1px solid rgba(205, 214, 244, 0.1);
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -12,69 +12,48 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md);
-  border-bottom: 1px solid rgba(205, 214, 244, 0.1);
+  padding: var(--spacing-md) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
 }
 
 .new-chat-button {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background-color: var(--primary);
-  color: var(--background);
-  border: none;
-  font-size: 18px;
-  line-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.new-chat-button:hover {
-  background-color: var(--primary-hover);
-}
-
-.sidebar-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
 }
 
 .conversation-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-xs);
 }
 
-.conversation {
-  padding: var(--spacing-md);
-  border-radius: var(--border-radius);
+.conversation-item {
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-xs);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-fast);
 }
 
-.conversation:hover {
-  background-color: rgba(205, 214, 244, 0.05);
-}
-
-.conversation.active {
-  background-color: rgba(114, 135, 253, 0.15);
+.conversation-item:hover {
+  background-color: var(--color-surface-variant);
 }
 
 .conversation-title {
-  font-weight: 600;
-  margin-bottom: var(--spacing-xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 500;
+  margin-bottom: var(--spacing-xxs);
+  color: var(--color-on-surface);
 }
 
 .conversation-preview {
   font-size: var(--font-size-sm);
-  color: var(--foreground-alt);
-  margin-bottom: var(--spacing-xs);
+  color: var(--color-on-surface-variant);
+  margin-bottom: var(--spacing-xxs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -82,64 +61,35 @@
 
 .conversation-time {
   font-size: var(--font-size-xs);
-  color: var(--foreground-alt);
-  text-align: right;
+  color: var(--color-on-surface-variant);
+  opacity: 0.8;
 }
 
-.sidebar-footer {
-  padding: var(--spacing-md);
-  border-top: 1px solid rgba(205, 214, 244, 0.1);
-}
-
-.sidebar-button {
+.sidebar-nav {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  background: transparent;
-  border: none;
-  color: var(--foreground);
-  padding: var(--spacing-sm);
-  width: 100%;
-  border-radius: var(--border-radius-sm);
-  transition: background-color 0.2s;
+  flex-direction: column;
+  padding: var(--spacing-xs);
 }
 
-.sidebar-button:hover {
-  background-color: rgba(205, 214, 244, 0.05);
-}
-
-.button-icon {
-  font-size: var(--font-size-lg);
-}
-
-.button-text {
-  flex: 1;
+.sidebar-nav-item {
   text-align: left;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: var(--spacing-xxs);
 }
 
-/* System light theme support */
-@media (prefers-color-scheme: light) {
-  .sidebar {
-    border-right-color: rgba(76, 79, 105, 0.1);
-  }
-  
-  .sidebar-header {
-    border-bottom-color: rgba(76, 79, 105, 0.1);
-  }
-  
-  .sidebar-footer {
-    border-top-color: rgba(76, 79, 105, 0.1);
-  }
-  
-  .conversation:hover {
-    background-color: rgba(76, 79, 105, 0.05);
-  }
-  
-  .conversation.active {
-    background-color: rgba(114, 135, 253, 0.15);
-  }
-  
-  .sidebar-button:hover {
-    background-color: rgba(76, 79, 105, 0.05);
-  }
+.sidebar-nav-item:hover {
+  background-color: var(--color-surface-variant);
+  color: var(--color-on-surface);
+}
+
+.sidebar-nav-item.active {
+  background-color: var(--color-primary);
+  color: white;
 }

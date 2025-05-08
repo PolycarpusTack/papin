@@ -1,118 +1,152 @@
-import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import React, { useState } from 'react';
+import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
 import './Settings.css';
 
-interface AppInfo {
-  name: string;
-  version: string;
-  platform: string;
-}
-
-// Settings component - lazy loaded when needed
 const Settings: React.FC = () => {
-  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [enabledFeatures, setEnabledFeatures] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [apiKey, setApiKey] = useState('');
+  const [selectedModel, setSelectedModel] = useState('claude-3-opus-20240229');
   
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const info = await invoke<AppInfo>('get_app_info');
-        const features = await invoke<string[]>('get_enabled_features');
-        
-        setAppInfo(info);
-        setEnabledFeatures(features);
-        setLoading(false);
-      } catch (err) {
-        console.error('Failed to load settings:', err);
-        setLoading(false);
-      }
-    };
-    
-    loadSettings();
-  }, []);
-  
-  if (loading) {
-    return (
-      <div className="settings-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading settings...</p>
-      </div>
-    );
-  }
+  const handleSaveSettings = () => {
+    // In a real app, we would send this to the backend
+    console.log('Saving settings:', { apiKey, selectedModel });
+    // Show a success message or notification
+    alert('Settings saved successfully!');
+  };
   
   return (
-    <div className="settings-container fade-in">
-      <h2>Settings</h2>
-      
-      <div className="settings-section">
-        <h3>Application Info</h3>
-        <div className="settings-info">
-          <div className="info-item">
-            <span className="info-label">Name:</span>
-            <span className="info-value">{appInfo?.name}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Version:</span>
-            <span className="info-value">{appInfo?.version}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">Platform:</span>
-            <span className="info-value">{appInfo?.platform}</span>
-          </div>
-        </div>
-      </div>
-      
-      <div className="settings-section">
-        <h3>Enabled Features</h3>
-        <div className="feature-list">
-          {enabledFeatures.map((feature) => (
-            <div key={feature} className="feature-item">
-              <div className="feature-checkbox checked"></div>
-              <span className="feature-name">{feature.replace('_', ' ')}</span>
+    <div className="settings-container">
+      <div className="settings-content">
+        <div className="settings-section">
+          <h2 className="settings-heading">General Settings</h2>
+          
+          <div className="settings-form">
+            <div className="form-group">
+              <label className="form-label">API Key</label>
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter your Anthropic API key"
+                fullWidth
+              />
+              <p className="form-hint">
+                Your API key is stored securely and never shared.
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
-      
-      <div className="settings-section">
-        <h3>Theme</h3>
-        <div className="theme-selector">
-          <button className="theme-option active">
-            <span className="theme-icon">🌙</span>
-            <span className="theme-name">System Default</span>
-          </button>
-          <button className="theme-option">
-            <span className="theme-icon">🌙</span>
-            <span className="theme-name">Dark</span>
-          </button>
-          <button className="theme-option">
-            <span className="theme-icon">☀️</span>
-            <span className="theme-name">Light</span>
-          </button>
-        </div>
-      </div>
-      
-      <div className="settings-section">
-        <h3>API Settings</h3>
-        <div className="form-group">
-          <label>API Key</label>
-          <input type="password" placeholder="Enter API Key" value="••••••••••••••••••••" />
+            
+            <div className="form-group">
+              <label className="form-label">Default Model</label>
+              <select 
+                className="select-input"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+              >
+                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+              </select>
+              <p className="form-hint">
+                The model that will be used by default for new conversations.
+              </p>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">Language</label>
+              <select className="select-input">
+                <option value="en">English</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="es">Spanish</option>
+              </select>
+            </div>
+            
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input type="checkbox" defaultChecked />
+                <span>Enable message history</span>
+              </label>
+              <p className="form-hint">
+                Store conversation history locally for future reference.
+              </p>
+            </div>
+            
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input type="checkbox" defaultChecked />
+                <span>Enable desktop notifications</span>
+              </label>
+            </div>
+          </div>
         </div>
         
-        <div className="form-group">
-          <label>Model</label>
-          <select>
-            <option>claude-3-5-sonnet</option>
-            <option>claude-3-opus</option>
-            <option>claude-3-5-haiku</option>
-          </select>
+        <div className="settings-section">
+          <h2 className="settings-heading">Advanced Settings</h2>
+          
+          <div className="settings-form">
+            <div className="form-group">
+              <label className="form-label">Temperature</label>
+              <div className="range-control">
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="1" 
+                  step="0.1" 
+                  defaultValue="0.7" 
+                  className="range-input"
+                />
+                <span className="range-value">0.7</span>
+              </div>
+              <p className="form-hint">
+                Controls randomness in responses. Lower values are more deterministic.
+              </p>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">Max Tokens</label>
+              <Input
+                type="number"
+                defaultValue="4000"
+                fullWidth
+              />
+              <p className="form-hint">
+                Maximum number of tokens for model responses.
+              </p>
+            </div>
+            
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input type="checkbox" defaultChecked />
+                <span>Use streaming mode</span>
+              </label>
+              <p className="form-hint">
+                Receive responses as they are generated instead of waiting for complete responses.
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
-      
-      <div className="settings-footer">
-        <button className="settings-button primary">Save Changes</button>
-        <button className="settings-button secondary">Reset to Default</button>
+        
+        <div className="settings-actions">
+          <Button 
+            variant="outline"
+            onClick={() => {
+              // Reset form or prompt for confirmation
+              if (confirm('Reset all settings to default values?')) {
+                setApiKey('');
+                setSelectedModel('claude-3-opus-20240229');
+              }
+            }}
+          >
+            Reset to Default
+          </Button>
+          
+          <Button 
+            variant="primary"
+            onClick={handleSaveSettings}
+          >
+            Save Settings
+          </Button>
+        </div>
       </div>
     </div>
   );

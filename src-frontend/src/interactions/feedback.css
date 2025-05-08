@@ -1,0 +1,330 @@
+/* Feedback and micro-interactions styles */
+
+/* Feedback notifications */
+.feedback-notification {
+  position: fixed;
+  bottom: var(--spacing-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  color: white;
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  box-shadow: var(--shadow-md);
+  z-index: var(--z-tooltip);
+  animation: slideUpFade 0.3s var(--animation-easing-spring);
+}
+
+.feedback-notification.success {
+  background-color: var(--color-success);
+}
+
+.feedback-notification.error {
+  background-color: var(--color-error);
+}
+
+.feedback-notification.fade-out {
+  animation: fadeOut 0.3s var(--animation-easing-standard) forwards;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Micro-interactions */
+
+/* Press effect */
+.press {
+  animation: pressEffect 0.2s var(--animation-easing-standard);
+}
+
+@keyframes pressEffect {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Pulse effect */
+.pulse {
+  animation: pulseEffect 1s var(--animation-easing-standard);
+}
+
+@keyframes pulseEffect {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb), 0.4);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(var(--color-primary-rgb), 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb), 0);
+  }
+}
+
+/* Shake effect */
+.shake {
+  animation: shakeEffect 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes shakeEffect {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-5px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(5px);
+  }
+}
+
+/* Bounce effect */
+.bounce {
+  animation: bounceEffect 0.8s var(--animation-easing-spring);
+}
+
+@keyframes bounceEffect {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-15px);
+  }
+  60% {
+    transform: translateY(-7px);
+  }
+}
+
+/* Wiggle effect */
+.wiggle {
+  animation: wiggleEffect 0.8s var(--animation-easing-spring);
+}
+
+@keyframes wiggleEffect {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-10deg);
+  }
+  40% {
+    transform: rotate(5deg);
+  }
+  60% {
+    transform: rotate(-5deg);
+  }
+  80% {
+    transform: rotate(2deg);
+  }
+}
+
+/* Tada effect */
+.tada {
+  animation: tadaEffect 1s var(--animation-easing-standard);
+}
+
+@keyframes tadaEffect {
+  0% {
+    transform: scale(1);
+  }
+  10%, 20% {
+    transform: scale(0.9) rotate(-3deg);
+  }
+  30%, 50%, 70%, 90% {
+    transform: scale(1.1) rotate(3deg);
+  }
+  40%, 60%, 80% {
+    transform: scale(1.1) rotate(-3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+/* Jello effect */
+.jello {
+  animation: jelloEffect 1s var(--animation-easing-standard);
+}
+
+@keyframes jelloEffect {
+  0%, 11.1%, 100% {
+    transform: none;
+  }
+  22.2% {
+    transform: skewX(-12.5deg) skewY(-12.5deg);
+  }
+  33.3% {
+    transform: skewX(6.25deg) skewY(6.25deg);
+  }
+  44.4% {
+    transform: skewX(-3.125deg) skewY(-3.125deg);
+  }
+  55.5% {
+    transform: skewX(1.5625deg) skewY(1.5625deg);
+  }
+  66.6% {
+    transform: skewX(-0.78125deg) skewY(-0.78125deg);
+  }
+  77.7% {
+    transform: skewX(0.390625deg) skewY(0.390625deg);
+  }
+  88.8% {
+    transform: skewX(-0.1953125deg) skewY(-0.1953125deg);
+  }
+}
+
+/* Heartbeat effect */
+.heartbeat {
+  animation: heartbeatEffect 1.5s var(--animation-easing-standard);
+}
+
+@keyframes heartbeatEffect {
+  0% {
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.1);
+  }
+  28% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.15);
+  }
+  70% {
+    transform: scale(1);
+  }
+}
+
+/* Ripple effect */
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.3);
+  transform: scale(0);
+  animation: rippleEffect 0.6s linear;
+  pointer-events: none;
+}
+
+@keyframes rippleEffect {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Hover effects */
+.hover-float {
+  transition: transform 0.3s var(--animation-easing-standard);
+}
+
+.hover-float:hover {
+  transform: translateY(-5px);
+}
+
+.hover-grow {
+  transition: transform 0.3s var(--animation-easing-standard);
+}
+
+.hover-grow:hover {
+  transform: scale(1.05);
+}
+
+.hover-shadow {
+  transition: box-shadow 0.3s var(--animation-easing-standard);
+}
+
+.hover-shadow:hover {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.hover-rotate {
+  transition: transform 0.3s var(--animation-easing-standard);
+}
+
+.hover-rotate:hover {
+  transform: rotate(5deg);
+}
+
+/* Feedback points indicator */
+.points-indicator {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--font-size-xl);
+  font-weight: bold;
+  color: var(--color-primary);
+  z-index: var(--z-tooltip);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.points-indicator.positive {
+  animation: pointsPositive 1.5s var(--animation-easing-standard) forwards;
+}
+
+.points-indicator.negative {
+  color: var(--color-error);
+  animation: pointsNegative 1.5s var(--animation-easing-standard) forwards;
+}
+
+@keyframes pointsPositive {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -120%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -150%) scale(1);
+  }
+}
+
+@keyframes pointsNegative {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 20%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 50%) scale(1);
+  }
+}

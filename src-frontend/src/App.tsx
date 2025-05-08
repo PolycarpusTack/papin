@@ -1,20 +1,22 @@
-import React, { Suspense, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Shell, { LoadState } from './components/Shell';
+import AppShell from './components/AppShell';
+import { ThemeProvider } from './theme/ThemeContext';
+import { AnimationProvider } from './animation';
+import { KeyboardProvider } from './keyboard';
+import { AccessibilityProvider } from './accessibility';
+import { TourProvider } from './tours';
+import { HelpProvider } from './help';
+import { ProgressiveDisclosureProvider } from './disclosure';
+import { A11yButton } from './accessibility';
 import './App.css';
 
-// Lazy-loaded components
-const LazyChat = React.lazy(() => import('./lazy/Chat'));
-const LazySettings = React.lazy(() => import('./lazy/Settings'));
-const LazySidebar = React.lazy(() => import('./lazy/Sidebar'));
-const LazyHeader = React.lazy(() => import('./lazy/Header'));
-
-// Helper for simulating loading delays
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Import base styles and animation utilities
+import './theme/variables.css';
 
 // Main application component
 function App() {
   const [loadState, setLoadState] = useState<LoadState>(LoadState.ShellLoading);
-  const [currentView, setCurrentView] = useState<string>('chat');
   
   useEffect(() => {
     // Simulate load state progression from the backend
@@ -44,42 +46,33 @@ function App() {
     progressLoadState();
   }, []);
   
-  // Render loading shell
-  if (loadState !== LoadState.FullyLoaded) {
-    return <Shell />;
-  }
-  
-  // Main application UI, loaded lazily
   return (
-    <div className="app">
-      <Suspense fallback={<div className="loading-component">Loading header...</div>}>
-        <LazyHeader 
-          onViewChange={setCurrentView} 
-          currentView={currentView} 
-        />
-      </Suspense>
-      
-      <div className="app-content">
-        <Suspense fallback={<div className="loading-component">Loading sidebar...</div>}>
-          <LazySidebar currentView={currentView} />
-        </Suspense>
-        
-        <main className="main-content">
-          {currentView === 'chat' && (
-            <Suspense fallback={<div className="loading-component">Loading chat...</div>}>
-              <LazyChat />
-            </Suspense>
-          )}
-          
-          {currentView === 'settings' && (
-            <Suspense fallback={<div className="loading-component">Loading settings...</div>}>
-              <LazySettings />
-            </Suspense>
-          )}
-        </main>
-      </div>
-    </div>
+    <ThemeProvider>
+      <AnimationProvider>
+        <KeyboardProvider>
+          <AccessibilityProvider>
+            <TourProvider>
+              <HelpProvider>
+                <ProgressiveDisclosureProvider>
+                  {loadState !== LoadState.FullyLoaded ? (
+                    <Shell />
+                  ) : (
+                    <>
+                      <AppShell loadState={loadState} />
+                      <A11yButton />
+                    </>
+                  )}
+                </ProgressiveDisclosureProvider>
+              </HelpProvider>
+            </TourProvider>
+          </AccessibilityProvider>
+        </KeyboardProvider>
+      </AnimationProvider>
+    </ThemeProvider>
   );
 }
+
+// Helper for simulating loading delays
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default App;

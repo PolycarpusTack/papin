@@ -1,0 +1,149 @@
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Variants */
+.button-primary {
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+}
+
+.button-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+}
+
+.button-secondary {
+  background-color: var(--color-secondary);
+  color: white;
+  border: none;
+}
+
+.button-secondary:hover:not(:disabled) {
+  background-color: var(--color-secondary-dark);
+}
+
+.button-outline {
+  background-color: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+
+.button-outline:hover:not(:disabled) {
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+}
+
+.button-ghost {
+  background-color: transparent;
+  color: var(--color-on-surface);
+  border: none;
+}
+
+.button-ghost:hover:not(:disabled) {
+  background-color: var(--color-surface-variant);
+}
+
+.button-danger {
+  background-color: var(--color-error);
+  color: white;
+  border: none;
+}
+
+.button-danger:hover:not(:disabled) {
+  background-color: darkred;
+}
+
+/* Sizes */
+.button-sm {
+  height: 2rem;
+  padding: 0 var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  min-width: 4rem;
+}
+
+.button-md {
+  height: 2.5rem;
+  padding: 0 var(--spacing-md);
+  font-size: var(--font-size-md);
+  min-width: 5rem;
+}
+
+.button-lg {
+  height: 3rem;
+  padding: 0 var(--spacing-lg);
+  font-size: var(--font-size-lg);
+  min-width: 6rem;
+}
+
+/* States */
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Loading state */
+.button-loading {
+  cursor: wait;
+}
+
+.loading-spinner {
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.button-loading .button-text {
+  opacity: 0;
+}
+
+/* Icons */
+.button-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button-icon-left {
+  margin-right: var(--spacing-xs);
+}
+
+.button-icon-right {
+  margin-left: var(--spacing-xs);
+}
+
+.button-sm .button-icon {
+  font-size: 0.875rem;
+}
+
+.button-md .button-icon {
+  font-size: 1rem;
+}
+
+.button-lg .button-icon {
+  font-size: 1.125rem;
+}
