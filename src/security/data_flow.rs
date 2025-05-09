@@ -152,7 +152,7 @@ impl DataFlowManager {
         let mut nodes = self.nodes.write().unwrap();
         
         // Add standard nodes
-        self.add_node_internal(&mut nodes, "local_app", "MCP Client", "application", true, "local", HashMap::new())?;
+        self.add_node_internal(&mut nodes, "local_app", "Papin", "application", true, "local", HashMap::new())?;
         self.add_node_internal(&mut nodes, "local_storage", "Local Storage", "storage", true, "local", HashMap::new())?;
         self.add_node_internal(&mut nodes, "memory", "Application Memory", "memory", true, "local", HashMap::new())?;
         self.add_node_internal(&mut nodes, "secure_enclave", "Secure Enclave", "secure_storage", true, "local", HashMap::new())?;

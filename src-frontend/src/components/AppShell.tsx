@@ -6,6 +6,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { FeatureFlags } from '../../src/feature_flags';
+import HelpButton from './help/HelpButton';
 
 // Import collaboration components
 import { 
@@ -19,6 +20,7 @@ import {
 // Import styles
 import './AppShell.css';
 import '../styles/collaboration.css';
+import HelpButton from './help/HelpButton';
 
 interface AppShellProps {
   featureFlags: FeatureFlags;
@@ -32,6 +34,7 @@ const AppShell: React.FC<AppShellProps> = ({ featureFlags }) => {
   const [currentConversationId, setCurrentConversationId] = useState<string>('conversation-123'); // Example ID
   const [collaborationEnabled, setCollaborationEnabled] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(ConnectionStatus.Disconnected);
+  const [helpVisible, setHelpVisible] = useState<boolean>(false);
   
   // Initialize feature flags
   useEffect(() => {
@@ -60,6 +63,22 @@ const AppShell: React.FC<AppShellProps> = ({ featureFlags }) => {
       initCollaboration();
     }
   }, [collaborationEnabled]);
+  
+  // Set up keyboard shortcut for help
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F1 key for help
+      if (e.key === 'F1') {
+        e.preventDefault();
+        setHelpVisible(true);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
   
   // Poll for connection status updates
   useEffect(() => {
@@ -151,10 +170,15 @@ const AppShell: React.FC<AppShellProps> = ({ featureFlags }) => {
       <div className="app-shell">
         {/* App toolbar with collaboration button */}
         <header className="app-header">
-          <div className="app-logo">MCP Client</div>
+          <div className="app-logo">Papin</div>
+          <div className="app-subtitle">an MCP Client</div>
           <div className="app-toolbar">
             {/* Other toolbar buttons would go here */}
             {collaborationEnabled && renderCollaborationStatus()}
+            <HelpButton 
+              isOpen={helpVisible} 
+              onOpenChange={(open) => setHelpVisible(open)} 
+            />
           </div>
         </header>
         

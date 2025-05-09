@@ -1,7 +1,7 @@
 [package]
-name = "mcp-client"
+name = "papin"
 version = "1.0.0"
-description = "MCP Client Application"
+description = "Papin - an MCP Client"
 authors = ["MCP Team"]
 license = "MIT"
 edition = "2021"
@@ -95,14 +95,14 @@ harness = false
 required-features = ["benchmarking"]
 
 [package.metadata.bundle]
-name = "MCP Client"
-identifier = "com.mcp-client.app"
+name = "Papin"
+identifier = "com.papin.app"
 icon = ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
 copyright = "© 2025 MCP Team"
 category = "DeveloperTool"
-short_description = "MCP Client Application"
+short_description = "Papin - an MCP Client"
 long_description = """
-MCP Client is a cross-platform desktop application for accessing and interacting with the MCP system.
+Papin is a cross-platform desktop application for accessing and interacting with the MCP system.
 It provides a rich set of features, robust offline capabilities, and excellent performance.
 """
 deb_depends = ["libssl3", "libwebkit2gtk-4.0-37"]
