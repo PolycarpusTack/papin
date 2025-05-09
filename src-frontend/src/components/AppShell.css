@@ -1,34 +1,67 @@
+/* AppShell styles */
+
 .app-shell {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--color-background);
-  color: var(--color-on-background);
-}
-
-.app-shell-content {
-  display: flex;
-  flex: 1;
+  width: 100vw;
   overflow: hidden;
 }
 
-.main-content {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.loading-component {
+.app-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 56px;
+  background-color: #2196f3;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.app-logo {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.app-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-sidebar {
+  width: 240px;
   height: 100%;
-  color: var(--color-on-surface-variant);
-  font-size: var(--font-size-md);
-  padding: var(--spacing-lg);
-  background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  margin: var(--spacing-md);
-  box-shadow: var(--shadow-sm);
+  background-color: #f5f5f5;
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+}
+
+.app-main {
+  flex: 1;
+  height: 100%;
+  overflow-y: auto;
+  position: relative;
+  padding: 20px;
+}
+
+.conversation-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.message {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
 }

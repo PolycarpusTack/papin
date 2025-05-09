@@ -1,479 +1,1218 @@
-use crate::feature_flags::{
-    FeatureFlag, FeatureFlagManager, RolloutStrategy, FEATURE_FLAG_MANAGER,
-    CANARY_GROUP_ALPHA, CANARY_GROUP_BETA, CANARY_GROUP_EARLY_ACCESS
-};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use uuid::Uuid;
+use std::sync::{Arc, RwLock};
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
+use log::{debug, info, warn, error};
 
+use crate::feature_flags::{FeatureFlags, FeatureManager};
+use crate::observability::metrics::{MetricsCollector, Metric, MetricType, HistogramStats, TimerStats};
+use crate::observability::telemetry::{TelemetryClient, track_feature_usage};
+use crate::error::Result;
+
+/// Canary release system for safely rolling out new features to users
+/// 
+/// This module provides a way to gradually roll out new features to users,
+/// monitor their performance, and if necessary, roll back problematic features.
+
+/// Canary group definitions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CanaryGroup {
+    /// Internal development and testing (employees only)
+    Internal,
+    
+    /// Alpha testers (opt-in, limited set of users)
+    Alpha, 
+    
+    /// Beta testers (broader group, opt-in)
+    Beta,
+    
+    /// Early access (production-ready features, limited rollout)
+    EarlyAccess,
+    
+    /// All users (full availability)
+    AllUsers,
+}
+
+impl CanaryGroup {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CanaryGroup::Internal => "internal",
+            CanaryGroup::Alpha => "alpha",
+            CanaryGroup::Beta => "beta",
+            CanaryGroup::EarlyAccess => "early_access",
+            CanaryGroup::AllUsers => "all_users",
+        }
+    }
+    
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "internal" => Some(CanaryGroup::Internal),
+            "alpha" => Some(CanaryGroup::Alpha),
+            "beta" => Some(CanaryGroup::Beta),
+            "early_access" | "earlyaccess" => Some(CanaryGroup::EarlyAccess),
+            "all_users" | "allusers" | "all" => Some(CanaryGroup::AllUsers),
+            _ => None,
+        }
+    }
+}
+
+/// Feature rollout status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RolloutStatus {
+    /// Feature is not available to any users
+    Disabled,
+    
+    /// Feature is available to a specific canary group
+    CanaryGroup(CanaryGroup),
+    
+    /// Feature is available to a percentage of users
+    PercentRollout(u8),
+    
+    /// Feature is available to all users
+    FullyEnabled,
+    
+    /// Feature was rolled back due to issues
+    RolledBack,
+}
+
+impl RolloutStatus {
+    pub fn is_enabled_for_group(&self, group: CanaryGroup) -> bool {
+        match self {
+            RolloutStatus::Disabled => false,
+            RolloutStatus::CanaryGroup(canary_group) => {
+                // If the user's group has same or higher access level
+                match (group, canary_group) {
+                    // Internal has access to everything
+                    (CanaryGroup::Internal, _) => true,
+                    
+                    // Alpha has access to Alpha, Beta, Early Access
+                    (CanaryGroup::Alpha, CanaryGroup::Alpha) => true,
+                    (CanaryGroup::Alpha, CanaryGroup::Beta) => true,
+                    (CanaryGroup::Alpha, CanaryGroup::EarlyAccess) => true,
+                    (CanaryGroup::Alpha, CanaryGroup::Internal) => false,
+                    
+                    // Beta has access to Beta, Early Access
+                    (CanaryGroup::Beta, CanaryGroup::Beta) => true,
+                    (CanaryGroup::Beta, CanaryGroup::EarlyAccess) => true,
+                    (CanaryGroup::Beta, _) => false,
+                    
+                    // Early Access has access to Early Access only
+                    (CanaryGroup::EarlyAccess, CanaryGroup::EarlyAccess) => true,
+                    (CanaryGroup::EarlyAccess, _) => false,
+                    
+                    // All Users only have access to features available to all users
+                    (CanaryGroup::AllUsers, CanaryGroup::AllUsers) => true,
+                    (CanaryGroup::AllUsers, _) => false,
+                }
+            },
+            RolloutStatus::PercentRollout(_) => {
+                // Internal, Alpha, and Beta users always get percent rollouts
+                matches!(group, CanaryGroup::Internal | CanaryGroup::Alpha | CanaryGroup::Beta)
+            },
+            RolloutStatus::FullyEnabled => true,
+            RolloutStatus::RolledBack => false,
+        }
+    }
+    
+    pub fn is_enabled_for_user(&self, user_id: &str, user_group: CanaryGroup) -> bool {
+        match self {
+            RolloutStatus::Disabled => false,
+            RolloutStatus::CanaryGroup(group) => self.is_enabled_for_group(user_group),
+            RolloutStatus::PercentRollout(percent) => {
+                // Always enable for internal, alpha, and beta users
+                if matches!(user_group, CanaryGroup::Internal | CanaryGroup::Alpha | CanaryGroup::Beta) {
+                    return true;
+                }
+                
+                // For others, check the percentage
+                let percent = *percent as u32;
+                if percent >= 100 {
+                    return true;
+                }
+                
+                // Use a hash of the user ID to determine if they're in the rollout
+                let mut seed_bytes = [0u8; 32];
+                
+                // Use the user ID as a seed for deterministic randomness
+                let user_bytes = user_id.as_bytes();
+                for (i, &byte) in user_bytes.iter().enumerate() {
+                    seed_bytes[i % 32] ^= byte;
+                }
+                
+                // Create a deterministic RNG
+                let mut rng = StdRng::from_seed(seed_bytes);
+                
+                // Generate a number between 0 and 99
+                let user_value = rng.gen_range(0..100);
+                
+                // If the user's value is less than the percentage, they get the feature
+                user_value < percent
+            },
+            RolloutStatus::FullyEnabled => true,
+            RolloutStatus::RolledBack => false,
+        }
+    }
+}
+
+/// Feature rollout configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanaryGroup {
-    pub name: String,
+pub struct FeatureRollout {
+    pub feature_name: String,
+    pub feature_flag: Option<FeatureFlags>,
     pub description: String,
-    pub percentage: f64,
-    pub active_features: Vec<String>,
-    pub user_count: u32,
+    pub status: RolloutStatus,
+    pub version_introduced: String,
+    pub metrics: Vec<String>,
+    pub rollout_schedule: Option<HashMap<DateTime<Utc>, RolloutStatus>>,
+    pub automatic: bool,
+    pub rollback_threshold: Option<MetricThreshold>,
+    pub owners: Vec<String>,
+}
+
+/// Metric threshold for automatic rollback
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricThreshold {
+    pub metric_name: String,
+    pub metric_type: MetricType,
+    pub operator: ThresholdOperator,
+    pub value: f64,
+    pub duration_minutes: u32,
+}
+
+/// Threshold operators
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdOperator {
+    GreaterThan,
+    LessThan,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
+    Equal,
+    NotEqual,
+}
+
+impl ThresholdOperator {
+    pub fn evaluate(&self, a: f64, b: f64) -> bool {
+        match self {
+            ThresholdOperator::GreaterThan => a > b,
+            ThresholdOperator::LessThan => a < b,
+            ThresholdOperator::GreaterThanOrEqual => a >= b,
+            ThresholdOperator::LessThanOrEqual => a <= b,
+            ThresholdOperator::Equal => (a - b).abs() < f64::EPSILON,
+            ThresholdOperator::NotEqual => (a - b).abs() >= f64::EPSILON,
+        }
+    }
+    
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ThresholdOperator::GreaterThan => ">",
+            ThresholdOperator::LessThan => "<",
+            ThresholdOperator::GreaterThanOrEqual => ">=",
+            ThresholdOperator::LessThanOrEqual => "<=",
+            ThresholdOperator::Equal => "==",
+            ThresholdOperator::NotEqual => "!=",
+        }
+    }
+}
+
+/// Canary release configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanaryConfig {
     pub enabled: bool,
+    pub user_id: String,
+    pub user_group: CanaryGroup,
+    pub opt_in_features: Vec<String>,
+    pub feature_rollouts: HashMap<String, FeatureRollout>,
+    pub metrics_comparison_enabled: bool,
+    pub auto_rollback_enabled: bool,
+    pub monitoring_interval_minutes: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanaryMetrics {
-    pub feature_id: String,
-    pub group_name: String,
-    pub metrics: CanaryMetricsData,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanaryMetricsData {
-    pub error_rate: CanaryComparison<f64>,
-    pub performance: CanaryComparison<Vec<f64>>,
-    pub usage: CanaryComparison<f64>,
-    pub timestamp: Vec<i64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanaryComparison<T> {
-    pub control: T,
-    pub canary: T,
-}
-
-pub struct CanaryReleaseService {
-    groups: Arc<Mutex<Vec<CanaryGroup>>>,
-    metrics: Arc<Mutex<HashMap<String, CanaryMetrics>>>,
-}
-
-impl CanaryReleaseService {
-    pub fn new() -> Self {
-        let default_groups = vec![
-            CanaryGroup {
-                name: CANARY_GROUP_ALPHA.to_string(),
-                description: "Alpha testers - early testing of experimental features".to_string(),
-                percentage: 0.05, // 5%
-                active_features: Vec::new(),
-                user_count: 0,
-                enabled: true,
-            },
-            CanaryGroup {
-                name: CANARY_GROUP_BETA.to_string(),
-                description: "Beta testers - testing of nearly-complete features".to_string(),
-                percentage: 0.1, // 10%
-                active_features: Vec::new(),
-                user_count: 0,
-                enabled: true,
-            },
-            CanaryGroup {
-                name: CANARY_GROUP_EARLY_ACCESS.to_string(),
-                description: "Early access users - preview of completed features".to_string(),
-                percentage: 0.2, // 20%
-                active_features: Vec::new(),
-                user_count: 0,
-                enabled: true,
-            },
-        ];
-        
+impl Default for CanaryConfig {
+    fn default() -> Self {
         Self {
-            groups: Arc::new(Mutex::new(default_groups)),
-            metrics: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-    
-    pub fn get_canary_groups(&self) -> Vec<CanaryGroup> {
-        let groups = self.groups.lock().unwrap();
-        groups.clone()
-    }
-    
-    pub fn get_canary_group(&self, name: &str) -> Option<CanaryGroup> {
-        let groups = self.groups.lock().unwrap();
-        groups.iter().find(|group| group.name == name).cloned()
-    }
-    
-    pub fn toggle_canary_group(&self, group_name: &str, enabled: bool) -> Result<(), String> {
-        let mut groups = self.groups.lock().unwrap();
-        if let Some(group) = groups.iter_mut().find(|group| group.name == group_name) {
-            group.enabled = enabled;
-            Ok(())
-        } else {
-            Err(format!("Canary group '{}' not found", group_name))
-        }
-    }
-    
-    pub fn update_canary_percentage(&self, group_name: &str, percentage: f64) -> Result<(), String> {
-        let mut groups = self.groups.lock().unwrap();
-        if let Some(group) = groups.iter_mut().find(|group| group.name == group_name) {
-            group.percentage = percentage.clamp(0.0, 1.0);
-            Ok(())
-        } else {
-            Err(format!("Canary group '{}' not found", group_name))
-        }
-    }
-    
-    pub fn create_canary_feature(&self, name: &str, description: &str, group_name: &str, percentage: f64) -> Result<FeatureFlag, String> {
-        // Ensure canary group exists
-        {
-            let groups = self.groups.lock().unwrap();
-            if !groups.iter().any(|group| group.name == group_name) {
-                return Err(format!("Canary group '{}' not found", group_name));
-            }
-        }
-        
-        // Create feature flag with canary rollout strategy
-        let feature_flag = FeatureFlag {
-            id: Uuid::new_v4().to_string(),
-            name: name.to_string(),
-            description: description.to_string(),
             enabled: true,
-            rollout_strategy: RolloutStrategy::CanaryGroup(group_name.to_string(), percentage.clamp(0.0, 1.0)),
-            dependencies: Vec::new(),
-            created_at: Utc::now().timestamp(),
-            updated_at: Utc::now().timestamp(),
-            metadata: HashMap::new(),
+            user_id: Uuid::new_v4().to_string(),
+            user_group: CanaryGroup::AllUsers,
+            opt_in_features: Vec::new(),
+            feature_rollouts: HashMap::new(),
+            metrics_comparison_enabled: true,
+            auto_rollback_enabled: true,
+            monitoring_interval_minutes: 15,
+        }
+    }
+}
+
+/// Metrics comparison between control and canary groups
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsComparison {
+    pub feature_name: String,
+    pub timestamp: DateTime<Utc>,
+    pub control_metrics: HashMap<String, MetricValue>,
+    pub canary_metrics: HashMap<String, MetricValue>,
+    pub difference_percent: HashMap<String, f64>,
+    pub alerts: Vec<MetricAlert>,
+}
+
+/// Metric value types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MetricValue {
+    Counter(f64),
+    Gauge(f64),
+    Histogram(HistogramStats),
+    Timer(TimerStats),
+}
+
+/// Metric alert
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricAlert {
+    pub metric_name: String,
+    pub severity: AlertSeverity,
+    pub message: String,
+    pub threshold: String,
+    pub actual_value: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Alert severity
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum AlertSeverity {
+    Info,
+    Warning,
+    Critical,
+}
+
+/// Main canary release manager
+pub struct CanaryManager {
+    config: Arc<RwLock<CanaryConfig>>,
+    feature_manager: Arc<RwLock<FeatureManager>>,
+    metrics_collector: Option<Arc<MetricsCollector>>,
+    telemetry_client: Option<Arc<TelemetryClient>>,
+    metrics_history: Arc<RwLock<HashMap<String, Vec<MetricsComparison>>>>,
+    last_check: Arc<RwLock<DateTime<Utc>>>,
+}
+
+impl CanaryManager {
+    pub fn new(
+        config: CanaryConfig,
+        feature_manager: Arc<RwLock<FeatureManager>>,
+        metrics_collector: Option<Arc<MetricsCollector>>,
+        telemetry_client: Option<Arc<TelemetryClient>>,
+    ) -> Self {
+        let manager = Self {
+            config: Arc::new(RwLock::new(config)),
+            feature_manager,
+            metrics_collector,
+            telemetry_client,
+            metrics_history: Arc::new(RwLock::new(HashMap::new())),
+            last_check: Arc::new(RwLock::new(Utc::now())),
         };
         
-        // Add feature to canary group
-        {
-            let mut groups = self.groups.lock().unwrap();
-            if let Some(group) = groups.iter_mut().find(|group| group.name == group_name) {
-                group.active_features.push(feature_flag.id.clone());
-            }
-        }
+        // Initialize feature flags based on config
+        manager.update_feature_flags();
         
-        // Create initial metrics
-        let _ = self.initialize_feature_metrics(&feature_flag.id, group_name);
+        // Start monitoring scheduled rollouts
+        manager.start_rollout_scheduler();
         
-        // Return the created feature
-        Ok(feature_flag)
+        manager
     }
     
-    pub fn toggle_canary_feature(&self, feature_id: &str, enabled: bool) -> Result<(), String> {
-        // Get feature flag
-        let flag_manager = FEATURE_FLAG_MANAGER.clone();
-        let flag = flag_manager.get_flag(feature_id)
-            .ok_or_else(|| format!("Feature flag '{}' not found", feature_id))?;
+    /// Check if a feature is enabled for the current user
+    pub fn is_feature_enabled(&self, feature_name: &str) -> bool {
+        let config = self.config.read().unwrap();
         
-        // Check if it's a canary feature
-        if let RolloutStrategy::CanaryGroup(_, _) = flag.rollout_strategy {
-            // Toggle the feature
-            flag_manager.toggle_flag(feature_id, enabled)
-        } else {
-            Err("Not a canary feature".to_string())
-        }
-    }
-    
-    pub fn promote_canary_feature(&self, feature_id: &str) -> Result<(), String> {
-        // Get feature flag
-        let flag_manager = FEATURE_FLAG_MANAGER.clone();
-        let flag = flag_manager.get_flag(feature_id)
-            .ok_or_else(|| format!("Feature flag '{}' not found", feature_id))?;
-        
-        // Only allow promoting canary features
-        if let RolloutStrategy::CanaryGroup(group_name, _) = &flag.rollout_strategy {
-            // Create a new flag with AllUsers strategy
-            let new_flag = FeatureFlag {
-                id: flag.id.clone(),
-                name: flag.name.clone(),
-                description: flag.description.clone(),
-                enabled: flag.enabled,
-                rollout_strategy: RolloutStrategy::AllUsers,
-                dependencies: flag.dependencies.clone(),
-                created_at: flag.created_at,
-                updated_at: Utc::now().timestamp(),
-                metadata: flag.metadata.clone(),
-            };
-            
-            // Update feature flag
-            flag_manager.update_flag(new_flag)?;
-            
-            // Remove from canary group
-            {
-                let mut groups = self.groups.lock().unwrap();
-                if let Some(group) = groups.iter_mut().find(|g| g.name == *group_name) {
-                    group.active_features.retain(|id| id != feature_id);
+        // Check if canary system is enabled
+        if !config.enabled {
+            // Fallback to feature flag system
+            if let Some(rollout) = config.feature_rollouts.get(feature_name) {
+                if let Some(flag) = rollout.feature_flag {
+                    return self.feature_manager.read().unwrap().is_enabled(flag);
                 }
             }
+            return false;
+        }
+        
+        // Check if this feature is in the rollout config
+        if let Some(rollout) = config.feature_rollouts.get(feature_name) {
+            // Check if feature is enabled based on rollout status
+            let is_enabled = rollout.status.is_enabled_for_user(&config.user_id, config.user_group);
             
-            Ok(())
+            // Check if user has explicitly opted in
+            let opted_in = config.opt_in_features.contains(&feature_name.to_string());
+            
+            // Track feature check
+            if let Some(client) = &self.telemetry_client {
+                let mut properties = HashMap::new();
+                properties.insert("feature".to_string(), feature_name.to_string());
+                properties.insert("enabled".to_string(), is_enabled.to_string());
+                properties.insert("opted_in".to_string(), opted_in.to_string());
+                properties.insert("user_group".to_string(), config.user_group.as_str().to_string());
+                
+                track_feature_usage(&format!("canary_check_{}", feature_name), Some(properties));
+            }
+            
+            return is_enabled || opted_in;
+        }
+        
+        // If feature not in canary system, fall back to feature flag system
+        let flag_result = if let Some(rollout) = config.feature_rollouts.get(feature_name) {
+            if let Some(flag) = rollout.feature_flag {
+                self.feature_manager.read().unwrap().is_enabled(flag)
+            } else {
+                false
+            }
         } else {
-            Err("Only canary features can be promoted".to_string())
+            false
+        };
+        
+        flag_result
+    }
+    
+    /// Get the user's canary group
+    pub fn get_user_group(&self) -> CanaryGroup {
+        self.config.read().unwrap().user_group
+    }
+    
+    /// Set the user's canary group
+    pub fn set_user_group(&self, group: CanaryGroup) {
+        let mut config = self.config.write().unwrap();
+        config.user_group = group;
+        
+        // Update feature flags based on new group
+        drop(config); // Release lock before calling update_feature_flags
+        self.update_feature_flags();
+        
+        // Track group change
+        if let Some(client) = &self.telemetry_client {
+            let mut properties = HashMap::new();
+            properties.insert("group".to_string(), group.as_str().to_string());
+            
+            track_feature_usage("canary_group_change", Some(properties));
         }
     }
     
-    pub fn rollback_canary_feature(&self, feature_id: &str) -> Result<(), String> {
-        // Get feature flag
-        let flag_manager = FEATURE_FLAG_MANAGER.clone();
-        let flag = flag_manager.get_flag(feature_id)
-            .ok_or_else(|| format!("Feature flag '{}' not found", feature_id))?;
+    /// Opt in to a specific feature
+    pub fn opt_in_feature(&self, feature_name: &str) -> Result<()> {
+        let mut config = self.config.write().unwrap();
         
-        // Only allow rolling back canary features
-        if let RolloutStrategy::CanaryGroup(group_name, _) = &flag.rollout_strategy {
-            // Disable the feature flag
-            flag_manager.toggle_flag(feature_id, false)?;
-            
-            // Remove from canary group
-            {
-                let mut groups = self.groups.lock().unwrap();
-                if let Some(group) = groups.iter_mut().find(|g| g.name == *group_name) {
-                    group.active_features.retain(|id| id != feature_id);
-                }
+        // Check if feature exists
+        if !config.feature_rollouts.contains_key(feature_name) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Feature '{}' not found in canary system", feature_name),
+            ).into());
+        }
+        
+        // Add to opt-in list if not already there
+        if !config.opt_in_features.contains(&feature_name.to_string()) {
+            config.opt_in_features.push(feature_name.to_string());
+        }
+        
+        // Update feature flag if needed
+        if let Some(rollout) = config.feature_rollouts.get(feature_name) {
+            if let Some(flag) = rollout.feature_flag {
+                drop(config); // Release lock before modifying feature manager
+                self.feature_manager.write().unwrap().enable(flag);
+            } else {
+                drop(config); // Release lock
             }
-            
-            Ok(())
         } else {
-            Err("Only canary features can be rolled back".to_string())
-        }
-    }
-    
-    pub fn get_user_canary_group(&self) -> Option<String> {
-        let flag_manager = FEATURE_FLAG_MANAGER.clone();
-        let config = flag_manager.config.read().unwrap();
-        
-        // Check each group to see if user is enrolled
-        for (group_name, enrolled) in &config.canary_groups {
-            if *enrolled {
-                return Some(group_name.clone());
-            }
+            drop(config); // Release lock
         }
         
-        None
-    }
-    
-    pub fn opt_into_canary_group(&self, group_name: &str) -> Result<(), String> {
-        // Ensure canary group exists
-        {
-            let groups = self.groups.lock().unwrap();
-            if !groups.iter().any(|group| group.name == group_name) {
-                return Err(format!("Canary group '{}' not found", group_name));
-            }
-        }
-        
-        // Opt into canary group
-        let flag_manager = FEATURE_FLAG_MANAGER.clone();
-        flag_manager.opt_into_canary_group(group_name);
-        
-        // Update user count
-        {
-            let mut groups = self.groups.lock().unwrap();
-            if let Some(group) = groups.iter_mut().find(|group| group.name == group_name) {
-                group.user_count += 1;
-            }
+        // Track opt-in
+        if let Some(client) = &self.telemetry_client {
+            let mut properties = HashMap::new();
+            properties.insert("feature".to_string(), feature_name.to_string());
+            
+            track_feature_usage("canary_opt_in", Some(properties));
         }
         
         Ok(())
     }
     
-    pub fn opt_out_of_canary_group(&self) -> Result<(), String> {
-        // Get current canary group
-        let current_group = self.get_user_canary_group();
+    /// Opt out of a specific feature
+    pub fn opt_out_feature(&self, feature_name: &str) -> Result<()> {
+        let mut config = self.config.write().unwrap();
         
-        if let Some(group_name) = current_group {
-            // Opt out of canary group
-            let flag_manager = FEATURE_FLAG_MANAGER.clone();
-            flag_manager.opt_out_of_canary_group(&group_name);
+        // Remove from opt-in list
+        config.opt_in_features.retain(|f| f != feature_name);
+        
+        // Store values we need after dropping the lock
+        let should_disable = if let Some(rollout) = config.feature_rollouts.get(feature_name) {
+            if let Some(flag) = rollout.feature_flag {
+                // Only disable if not otherwise enabled through user's group
+                let should_disable = !rollout.status.is_enabled_for_user(&config.user_id, config.user_group);
+                
+                if should_disable {
+                    Some(flag)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        drop(config); // Release lock
+        
+        // Update feature flag if needed
+        if let Some(flag) = should_disable {
+            self.feature_manager.write().unwrap().disable(flag);
+        }
+        
+        // Track opt-out
+        if let Some(client) = &self.telemetry_client {
+            let mut properties = HashMap::new();
+            properties.insert("feature".to_string(), feature_name.to_string());
             
-            // Update user count
-            {
-                let mut groups = self.groups.lock().unwrap();
-                if let Some(group) = groups.iter_mut().find(|group| group.name == group_name) {
-                    if group.user_count > 0 {
-                        group.user_count -= 1;
+            track_feature_usage("canary_opt_out", Some(properties));
+        }
+        
+        Ok(())
+    }
+    
+    /// Add a new feature rollout
+    pub fn add_feature_rollout(&self, rollout: FeatureRollout) -> Result<()> {
+        let mut config = self.config.write().unwrap();
+        
+        // Add to rollouts map
+        config.feature_rollouts.insert(rollout.feature_name.clone(), rollout.clone());
+        
+        // Store values we need after dropping the lock
+        let feature_flag = rollout.feature_flag;
+        let status = rollout.status;
+        let user_id = config.user_id.clone();
+        let user_group = config.user_group;
+        let opt_in = config.opt_in_features.contains(&rollout.feature_name);
+        
+        drop(config); // Release lock
+        
+        // Update feature flag if needed
+        if let Some(flag) = feature_flag {
+            let mut feature_manager = self.feature_manager.write().unwrap();
+            
+            if status.is_enabled_for_user(&user_id, user_group) || opt_in {
+                feature_manager.enable(flag);
+            } else {
+                feature_manager.disable(flag);
+            }
+        }
+        
+        // Track new rollout
+        if let Some(client) = &self.telemetry_client {
+            let mut properties = HashMap::new();
+            properties.insert("feature".to_string(), rollout.feature_name.clone());
+            properties.insert("status".to_string(), format!("{:?}", rollout.status));
+            
+            track_feature_usage("canary_rollout_added", Some(properties));
+        }
+        
+        Ok(())
+    }
+    
+    /// Update a feature rollout
+    pub fn update_feature_rollout(&self, feature_name: &str, new_status: RolloutStatus) -> Result<()> {
+        // Get values under a read lock first to minimize write lock time
+        let (old_status, flag, automatic, user_id, user_group, opt_in) = {
+            let config = self.config.read().unwrap();
+            
+            if let Some(rollout) = config.feature_rollouts.get(feature_name) {
+                let old_status = rollout.status;
+                let flag = rollout.feature_flag;
+                let automatic = rollout.automatic;
+                let user_id = config.user_id.clone();
+                let user_group = config.user_group;
+                let opt_in = config.opt_in_features.contains(&rollout.feature_name);
+                
+                (Some(old_status), flag, automatic, user_id, user_group, opt_in)
+            } else {
+                (None, None, false, String::new(), CanaryGroup::AllUsers, false)
+            }
+        };
+        
+        // If feature doesn't exist, return error
+        if old_status.is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Feature '{}' not found in canary system", feature_name),
+            ).into());
+        }
+        
+        // Update status
+        {
+            let mut config = self.config.write().unwrap();
+            if let Some(rollout) = config.feature_rollouts.get_mut(feature_name) {
+                rollout.status = new_status;
+            }
+        }
+        
+        // Update feature flag if needed
+        if let Some(flag) = flag {
+            let mut feature_manager = self.feature_manager.write().unwrap();
+            
+            if new_status.is_enabled_for_user(&user_id, user_group) || opt_in {
+                feature_manager.enable(flag);
+            } else {
+                feature_manager.disable(flag);
+            }
+        }
+        
+        // Track status change
+        if let Some(client) = &self.telemetry_client {
+            let mut properties = HashMap::new();
+            properties.insert("feature".to_string(), feature_name.to_string());
+            properties.insert("old_status".to_string(), format!("{:?}", old_status.unwrap()));
+            properties.insert("new_status".to_string(), format!("{:?}", new_status));
+            
+            track_feature_usage("canary_rollout_updated", Some(properties));
+        }
+        
+        Ok(())
+    }
+    
+    /// Remove a feature rollout
+    pub fn remove_feature_rollout(&self, feature_name: &str) -> Result<()> {
+        // Extract values under read lock first
+        let flag = {
+            let config = self.config.read().unwrap();
+            
+            if let Some(rollout) = config.feature_rollouts.get(feature_name) {
+                rollout.feature_flag
+            } else {
+                None
+            }
+        };
+        
+        // Update with write lock
+        {
+            let mut config = self.config.write().unwrap();
+            
+            // Remove if it exists
+            if !config.feature_rollouts.contains_key(feature_name) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Feature '{}' not found in canary system", feature_name),
+                ).into());
+            }
+            
+            config.feature_rollouts.remove(feature_name);
+            
+            // Remove from opt-in list
+            config.opt_in_features.retain(|f| f != feature_name);
+        }
+        
+        // Disable feature flag if needed
+        if let Some(flag) = flag {
+            self.feature_manager.write().unwrap().disable(flag);
+        }
+        
+        // Track removal
+        if let Some(client) = &self.telemetry_client {
+            let mut properties = HashMap::new();
+            properties.insert("feature".to_string(), feature_name.to_string());
+            
+            track_feature_usage("canary_rollout_removed", Some(properties));
+        }
+        
+        Ok(())
+    }
+    
+    /// Update feature flags based on canary configuration
+    fn update_feature_flags(&self) {
+        let config = self.config.read().unwrap();
+        let mut feature_manager = self.feature_manager.write().unwrap();
+        
+        for (name, rollout) in &config.feature_rollouts {
+            if let Some(flag) = rollout.feature_flag {
+                let is_enabled = rollout.status.is_enabled_for_user(&config.user_id, config.user_group) || 
+                                config.opt_in_features.contains(name);
+                
+                if is_enabled {
+                    feature_manager.enable(flag);
+                } else {
+                    feature_manager.disable(flag);
+                }
+            }
+        }
+    }
+    
+    /// Start scheduler for automatic rollouts based on schedule
+    fn start_rollout_scheduler(&self) {
+        let config_arc = Arc::clone(&self.config);
+        let manager_arc = Arc::new(self.clone());
+        
+        std::thread::spawn(move || {
+            loop {
+                // Sleep for a while between checks
+                std::thread::sleep(std::time::Duration::from_secs(60));
+                
+                // Check if there are any scheduled rollouts
+                let now = Utc::now();
+                let mut updates = Vec::new();
+                
+                {
+                    let config = config_arc.read().unwrap();
+                    
+                    // Skip if canary system is disabled
+                    if !config.enabled {
+                        continue;
+                    }
+                    
+                    // Check all rollouts with schedules
+                    for (name, rollout) in &config.feature_rollouts {
+                        if let Some(schedule) = &rollout.rollout_schedule {
+                            // Find scheduled updates that should have happened by now
+                            for (scheduled_time, status) in schedule {
+                                if scheduled_time <= &now && *status != rollout.status {
+                                    updates.push((name.clone(), *status));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Apply any needed updates
+                for (name, status) in updates {
+                    debug!("Applying scheduled rollout update for feature '{}': {:?}", name, status);
+                    if let Err(e) = manager_arc.update_feature_rollout(&name, status) {
+                        error!("Failed to apply scheduled rollout update: {}", e);
                     }
                 }
             }
-            
-            Ok(())
-        } else {
-            Err("User is not enrolled in any canary group".to_string())
-        }
-    }
-    
-    pub fn get_canary_metrics(&self, feature_id: &str, group_name: &str) -> Option<CanaryMetrics> {
-        let metrics = self.metrics.lock().unwrap();
-        metrics.get(&format!("{}:{}", feature_id, group_name)).cloned()
-    }
-    
-    pub fn update_canary_metrics(&self, feature_id: &str, group_name: &str, is_canary: bool, 
-                                  error_rate: Option<f64>, performance: Option<f64>, used: bool) {
-        let mut metrics = self.metrics.lock().unwrap();
-        let key = format!("{}:{}", feature_id, group_name);
-        
-        let entry = metrics.entry(key).or_insert_with(|| {
-            self.initialize_feature_metrics(feature_id, group_name).unwrap_or_else(|_| {
-                // Create default metrics if initialization fails
-                CanaryMetrics {
-                    feature_id: feature_id.to_string(),
-                    group_name: group_name.to_string(),
-                    metrics: CanaryMetricsData {
-                        error_rate: CanaryComparison {
-                            control: 0.0,
-                            canary: 0.0,
-                        },
-                        performance: CanaryComparison {
-                            control: vec![],
-                            canary: vec![],
-                        },
-                        usage: CanaryComparison {
-                            control: 0.0,
-                            canary: 0.0,
-                        },
-                        timestamp: vec![],
-                    },
-                }
-            })
         });
-        
-        let now = Utc::now().timestamp();
-        
-        // Update metrics
-        if let Some(rate) = error_rate {
-            if is_canary {
-                entry.metrics.error_rate.canary = rate;
-            } else {
-                entry.metrics.error_rate.control = rate;
-            }
-        }
-        
-        if let Some(perf) = performance {
-            // Add new performance data point
-            if is_canary {
-                entry.metrics.performance.canary.push(perf);
-                
-                // Keep only last N points
-                if entry.metrics.performance.canary.len() > 20 {
-                    entry.metrics.performance.canary.remove(0);
-                }
-            } else {
-                entry.metrics.performance.control.push(perf);
-                
-                // Keep only last N points
-                if entry.metrics.performance.control.len() > 20 {
-                    entry.metrics.performance.control.remove(0);
-                }
-            }
-            
-            // Add timestamp if needed
-            if entry.metrics.timestamp.len() < entry.metrics.performance.canary.len() {
-                entry.metrics.timestamp.push(now);
-                
-                // Keep only last N timestamps
-                if entry.metrics.timestamp.len() > 20 {
-                    entry.metrics.timestamp.remove(0);
-                }
-            }
-        }
-        
-        // Update usage if feature was used
-        if used {
-            // In a real implementation, this would track usage over time
-            // For simplicity, we're just setting a static value
-            if is_canary {
-                entry.metrics.usage.canary = 75.0; // Example value
-            } else {
-                entry.metrics.usage.control = 80.0; // Example value
-            }
-        }
     }
     
-    fn initialize_feature_metrics(&self, feature_id: &str, group_name: &str) -> Result<CanaryMetrics, String> {
-        // Create initial metrics structure
-        let metrics = CanaryMetrics {
-            feature_id: feature_id.to_string(),
-            group_name: group_name.to_string(),
-            metrics: CanaryMetricsData {
-                error_rate: CanaryComparison {
-                    control: 0.0,
-                    canary: 0.0,
-                },
-                performance: CanaryComparison {
-                    control: vec![],
-                    canary: vec![],
-                },
-                usage: CanaryComparison {
-                    control: 0.0,
-                    canary: 0.0,
-                },
-                timestamp: vec![],
-            },
+    /// Check metrics for automatic rollbacks
+    pub fn check_metrics(&self) -> Vec<MetricAlert> {
+        let config = self.config.read().unwrap();
+        
+        // Check if auto-rollback is enabled
+        if !config.enabled || !config.auto_rollback_enabled {
+            return Vec::new();
+        }
+        
+        // Check if it's time to check metrics based on interval
+        let now = Utc::now();
+        let mut last_check = self.last_check.write().unwrap();
+        let minutes_since_last_check = (now - *last_check).num_minutes() as u32;
+        
+        if minutes_since_last_check < config.monitoring_interval_minutes {
+            return Vec::new();
+        }
+        
+        // Update last check time
+        *last_check = now;
+        
+        // Collect all alerts
+        let mut all_alerts = Vec::new();
+        
+        // Check metrics for each feature that has a rollback threshold
+        let metrics_collector = match &self.metrics_collector {
+            Some(collector) => collector,
+            None => return Vec::new(), // No metrics collector available
         };
         
-        // Store metrics
-        let mut metrics_map = self.metrics.lock().unwrap();
-        metrics_map.insert(format!("{}:{}", feature_id, group_name), metrics.clone());
+        // Get metrics reports
+        let counters = metrics_collector.get_counters_report().unwrap_or_default();
+        let gauges = metrics_collector.get_gauges_report().unwrap_or_default();
+        let histograms = metrics_collector.get_histograms_report().unwrap_or_default();
+        let timers = metrics_collector.get_timers_report().unwrap_or_default();
         
-        Ok(metrics)
+        for (feature_name, rollout) in &config.feature_rollouts {
+            if let Some(threshold) = &rollout.rollback_threshold {
+                // Skip features that are already rolled back or fully enabled
+                if matches!(rollout.status, RolloutStatus::RolledBack | RolloutStatus::FullyEnabled) {
+                    continue;
+                }
+                
+                // Check the appropriate metric based on type
+                let mut threshold_exceeded = false;
+                let mut actual_value = String::new();
+                
+                match threshold.metric_type {
+                    MetricType::Counter => {
+                        if let Some(value) = counters.get(&threshold.metric_name) {
+                            if threshold.operator.evaluate(*value, threshold.value) {
+                                threshold_exceeded = true;
+                                actual_value = value.to_string();
+                            }
+                        }
+                    },
+                    MetricType::Gauge => {
+                        if let Some(value) = gauges.get(&threshold.metric_name) {
+                            if threshold.operator.evaluate(*value, threshold.value) {
+                                threshold_exceeded = true;
+                                actual_value = value.to_string();
+                            }
+                        }
+                    },
+                    MetricType::Histogram => {
+                        if let Some(stats) = histograms.get(&threshold.metric_name) {
+                            // Compare based on average value by default
+                            if threshold.operator.evaluate(stats.avg, threshold.value) {
+                                threshold_exceeded = true;
+                                actual_value = stats.avg.to_string();
+                            }
+                        }
+                    },
+                    MetricType::Timer => {
+                        if let Some(stats) = timers.get(&threshold.metric_name) {
+                            // Compare based on average value by default
+                            if threshold.operator.evaluate(stats.avg_ms, threshold.value) {
+                                threshold_exceeded = true;
+                                actual_value = stats.avg_ms.to_string();
+                            }
+                        }
+                    },
+                }
+                
+                if threshold_exceeded {
+                    // Create alert
+                    let alert = MetricAlert {
+                        metric_name: threshold.metric_name.clone(),
+                        severity: AlertSeverity::Critical,
+                        message: format!(
+                            "Metric '{}' threshold exceeded for feature '{}'. Threshold: {} {}, actual value: {}",
+                            threshold.metric_name, 
+                            feature_name,
+                            threshold.operator.as_str(), 
+                            threshold.value,
+                            actual_value
+                        ),
+                        threshold: format!("{} {}", threshold.operator.as_str(), threshold.value),
+                        actual_value,
+                        timestamp: now,
+                    };
+                    
+                    all_alerts.push(alert);
+                    
+                    // Auto-rollback if needed
+                    if rollout.automatic {
+                        debug!("Auto-rolling back feature '{}' due to threshold violation", feature_name);
+                        drop(config); // Release read lock before acquiring write lock
+                        if let Err(e) = self.update_feature_rollout(feature_name, RolloutStatus::RolledBack) {
+                            error!("Failed to auto-rollback feature: {}", e);
+                        }
+                        return all_alerts; // Return early since we modified the config
+                    }
+                }
+            }
+        }
+        
+        all_alerts
+    }
+    
+    /// Compare metrics between control and canary groups
+    pub fn compare_metrics(&self, feature_name: &str) -> Option<MetricsComparison> {
+        let config = self.config.read().unwrap();
+        
+        if !config.enabled || !config.metrics_comparison_enabled {
+            return None;
+        }
+        
+        // Check if the feature exists
+        let rollout = match config.feature_rollouts.get(feature_name) {
+            Some(r) => r,
+            None => return None,
+        };
+        
+        // Skip if feature is not in an active canary state
+        if !matches!(rollout.status, RolloutStatus::CanaryGroup(_) | RolloutStatus::PercentRollout(_)) {
+            return None;
+        }
+        
+        // Check if we have a metrics collector
+        let metrics_collector = match &self.metrics_collector {
+            Some(collector) => collector,
+            None => return None,
+        };
+        
+        // Get metric reports
+        let counters = metrics_collector.get_counters_report().unwrap_or_default();
+        let gauges = metrics_collector.get_gauges_report().unwrap_or_default();
+        let histograms = metrics_collector.get_histograms_report().unwrap_or_default();
+        let timers = metrics_collector.get_timers_report().unwrap_or_default();
+        
+        // Collect metrics for this feature
+        let mut control_metrics = HashMap::new();
+        let mut canary_metrics = HashMap::new();
+        let mut diff_percent = HashMap::new();
+        let mut alerts = Vec::new();
+        
+        // Check each metric associated with this feature
+        for metric_name in &rollout.metrics {
+            // First, check if we have control and canary metrics
+            let control_name = format!("{}_control", metric_name);
+            let canary_name = format!("{}_canary", metric_name);
+            
+            // Check counters
+            if let (Some(control), Some(canary)) = (counters.get(&control_name), counters.get(&canary_name)) {
+                control_metrics.insert(metric_name.clone(), MetricValue::Counter(*control));
+                canary_metrics.insert(metric_name.clone(), MetricValue::Counter(*canary));
+                
+                // Calculate percent difference if control is not zero
+                if *control > 0.0 {
+                    let diff = (canary - control) / control * 100.0;
+                    diff_percent.insert(metric_name.clone(), diff);
+                    
+                    // Generate alert if difference is significant
+                    if diff.abs() > 20.0 {
+                        alerts.push(MetricAlert {
+                            metric_name: metric_name.clone(),
+                            severity: if diff.abs() > 50.0 { AlertSeverity::Critical } else { AlertSeverity::Warning },
+                            message: format!(
+                                "Counter metric '{}' for feature '{}' shows {}% {} in canary group",
+                                metric_name, 
+                                feature_name,
+                                diff.abs(),
+                                if diff > 0.0 { "increase" } else { "decrease" }
+                            ),
+                            threshold: "20% difference".to_string(),
+                            actual_value: format!("{}% difference", diff),
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+                continue;
+            }
+            
+            // Check gauges
+            if let (Some(control), Some(canary)) = (gauges.get(&control_name), gauges.get(&canary_name)) {
+                control_metrics.insert(metric_name.clone(), MetricValue::Gauge(*control));
+                canary_metrics.insert(metric_name.clone(), MetricValue::Gauge(*canary));
+                
+                // Calculate percent difference if control is not zero
+                if *control > 0.0 {
+                    let diff = (canary - control) / control * 100.0;
+                    diff_percent.insert(metric_name.clone(), diff);
+                    
+                    // Generate alert if difference is significant
+                    if diff.abs() > 20.0 {
+                        alerts.push(MetricAlert {
+                            metric_name: metric_name.clone(),
+                            severity: if diff.abs() > 50.0 { AlertSeverity::Critical } else { AlertSeverity::Warning },
+                            message: format!(
+                                "Gauge metric '{}' for feature '{}' shows {}% {} in canary group",
+                                metric_name, 
+                                feature_name,
+                                diff.abs(),
+                                if diff > 0.0 { "increase" } else { "decrease" }
+                            ),
+                            threshold: "20% difference".to_string(),
+                            actual_value: format!("{}% difference", diff),
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+                continue;
+            }
+            
+            // Check histograms
+            if let (Some(control), Some(canary)) = (histograms.get(&control_name), histograms.get(&canary_name)) {
+                control_metrics.insert(metric_name.clone(), MetricValue::Histogram(control.clone()));
+                canary_metrics.insert(metric_name.clone(), MetricValue::Histogram(canary.clone()));
+                
+                // Calculate percent difference if control average is not zero
+                if control.avg > 0.0 {
+                    let diff = (canary.avg - control.avg) / control.avg * 100.0;
+                    diff_percent.insert(metric_name.clone(), diff);
+                    
+                    // Generate alert if difference is significant
+                    if diff.abs() > 20.0 {
+                        alerts.push(MetricAlert {
+                            metric_name: metric_name.clone(),
+                            severity: if diff.abs() > 50.0 { AlertSeverity::Critical } else { AlertSeverity::Warning },
+                            message: format!(
+                                "Histogram metric '{}' for feature '{}' shows {}% {} in canary group",
+                                metric_name, 
+                                feature_name,
+                                diff.abs(),
+                                if diff > 0.0 { "increase" } else { "decrease" }
+                            ),
+                            threshold: "20% difference".to_string(),
+                            actual_value: format!("{}% difference", diff),
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+                continue;
+            }
+            
+            // Check timers
+            if let (Some(control), Some(canary)) = (timers.get(&control_name), timers.get(&canary_name)) {
+                control_metrics.insert(metric_name.clone(), MetricValue::Timer(control.clone()));
+                canary_metrics.insert(metric_name.clone(), MetricValue::Timer(canary.clone()));
+                
+                // Calculate percent difference if control average is not zero
+                if control.avg_ms > 0.0 {
+                    let diff = (canary.avg_ms - control.avg_ms) / control.avg_ms * 100.0;
+                    diff_percent.insert(metric_name.clone(), diff);
+                    
+                    // Generate alert if difference is significant
+                    if diff.abs() > 20.0 {
+                        alerts.push(MetricAlert {
+                            metric_name: metric_name.clone(),
+                            severity: if diff.abs() > 50.0 { AlertSeverity::Critical } else { AlertSeverity::Warning },
+                            message: format!(
+                                "Timer metric '{}' for feature '{}' shows {}% {} in canary group",
+                                metric_name, 
+                                feature_name,
+                                diff.abs(),
+                                if diff > 0.0 { "increase" } else { "decrease" }
+                            ),
+                            threshold: "20% difference".to_string(),
+                            actual_value: format!("{}% difference", diff),
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+                continue;
+            }
+        }
+        
+        // Create comparison result
+        let comparison = MetricsComparison {
+            feature_name: feature_name.to_string(),
+            timestamp: Utc::now(),
+            control_metrics,
+            canary_metrics,
+            difference_percent: diff_percent,
+            alerts,
+        };
+        
+        // Save to history
+        {
+            let mut history = self.metrics_history.write().unwrap();
+            let feature_history = history.entry(feature_name.to_string()).or_insert_with(Vec::new);
+            feature_history.push(comparison.clone());
+            
+            // Limit history size
+            if feature_history.len() > 100 {
+                feature_history.remove(0);
+            }
+        }
+        
+        Some(comparison)
+    }
+    
+    /// Get metrics history for a feature
+    pub fn get_metrics_history(&self, feature_name: &str) -> Vec<MetricsComparison> {
+        let history = self.metrics_history.read().unwrap();
+        
+        if let Some(feature_history) = history.get(feature_name) {
+            feature_history.clone()
+        } else {
+            Vec::new()
+        }
+    }
+    
+    /// Get all feature rollouts
+    pub fn get_feature_rollouts(&self) -> HashMap<String, FeatureRollout> {
+        self.config.read().unwrap().feature_rollouts.clone()
+    }
+    
+    /// Get a specific feature rollout
+    pub fn get_feature_rollout(&self, feature_name: &str) -> Option<FeatureRollout> {
+        self.config.read().unwrap().feature_rollouts.get(feature_name).cloned()
+    }
+    
+    /// Get all opt-in features
+    pub fn get_opt_in_features(&self) -> Vec<String> {
+        self.config.read().unwrap().opt_in_features.clone()
     }
 }
 
-// Singleton instance
+// Enable deep cloning for the manager to use in the rollout scheduler
+impl Clone for CanaryManager {
+    fn clone(&self) -> Self {
+        Self {
+            config: Arc::clone(&self.config),
+            feature_manager: Arc::clone(&self.feature_manager),
+            metrics_collector: self.metrics_collector.clone(),
+            telemetry_client: self.telemetry_client.clone(),
+            metrics_history: Arc::clone(&self.metrics_history),
+            last_check: Arc::clone(&self.last_check),
+        }
+    }
+}
+
+// Create a global canary manager
 lazy_static::lazy_static! {
-    pub static ref CANARY_SERVICE: Arc<CanaryReleaseService> = {
-        Arc::new(CanaryReleaseService::new())
+    pub static ref CANARY_MANAGER: Arc<RwLock<Option<CanaryManager>>> = Arc::new(RwLock::new(None));
+}
+
+// Initialize canary manager
+pub fn init_canary_manager(
+    config: CanaryConfig,
+    feature_manager: Arc<RwLock<FeatureManager>>,
+    metrics_collector: Option<Arc<MetricsCollector>>,
+    telemetry_client: Option<Arc<TelemetryClient>>,
+) -> Result<()> {
+    let manager = CanaryManager::new(
+        config,
+        feature_manager,
+        metrics_collector,
+        telemetry_client,
+    );
+    
+    let mut global_manager = CANARY_MANAGER.write().unwrap();
+    *global_manager = Some(manager);
+    
+    info!("Canary release manager initialized");
+    
+    Ok(())
+}
+
+// Helper functions to interact with the global canary manager
+pub fn is_feature_enabled(feature_name: &str) -> bool {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.is_feature_enabled(feature_name)
+    } else {
+        false
+    }
+}
+
+pub fn check_metrics() -> Vec<MetricAlert> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.check_metrics()
+    } else {
+        Vec::new()
+    }
+}
+
+pub fn compare_metrics(feature_name: &str) -> Option<MetricsComparison> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.compare_metrics(feature_name)
+    } else {
+        None
+    }
+}
+
+pub fn opt_in_feature(feature_name: &str) -> Result<()> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.opt_in_feature(feature_name)
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Canary manager not initialized",
+        ).into())
+    }
+}
+
+pub fn opt_out_feature(feature_name: &str) -> Result<()> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.opt_out_feature(feature_name)
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Canary manager not initialized",
+        ).into())
+    }
+}
+
+pub fn set_user_group(group: CanaryGroup) -> Result<()> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.set_user_group(group);
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Canary manager not initialized",
+        ).into())
+    }
+}
+
+// Macro to check if a feature is enabled
+#[macro_export]
+macro_rules! feature_enabled {
+    ($feature_name:expr) => {
+        $crate::observability::canary::is_feature_enabled($feature_name)
     };
 }
 
 // Tauri commands
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn get_canary_groups() -> Vec<CanaryGroup> {
-    CANARY_SERVICE.get_canary_groups()
+pub fn get_canary_group() -> String {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.get_user_group().as_str().to_string()
+    } else {
+        "all_users".to_string()
+    }
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn get_user_canary_group() -> Option<String> {
-    CANARY_SERVICE.get_user_canary_group()
+pub fn set_canary_group(group: String) -> Result<()> {
+    let canary_group = CanaryGroup::from_str(&group)
+        .ok_or_else(|| std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Invalid canary group: {}", group),
+        ))?;
+    
+    set_user_group(canary_group)
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn opt_into_canary_group(group_name: String) -> Result<(), String> {
-    CANARY_SERVICE.opt_into_canary_group(&group_name)
+pub fn get_feature_rollouts() -> HashMap<String, FeatureRollout> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.get_feature_rollouts()
+    } else {
+        HashMap::new()
+    }
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn opt_out_of_canary_group() -> Result<(), String> {
-    CANARY_SERVICE.opt_out_of_canary_group()
+pub fn get_canary_metrics(feature_name: String) -> Option<MetricsComparison> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.compare_metrics(&feature_name)
+    } else {
+        None
+    }
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn toggle_canary_group(group_name: String, enabled: bool) -> Result<(), String> {
-    CANARY_SERVICE.toggle_canary_group(&group_name, enabled)
+pub fn opt_in_canary_feature(feature_name: String) -> Result<()> {
+    opt_in_feature(&feature_name)
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn update_canary_percentage(group_name: String, percentage: f64) -> Result<(), String> {
-    CANARY_SERVICE.update_canary_percentage(&group_name, percentage)
+pub fn opt_out_canary_feature(feature_name: String) -> Result<()> {
+    opt_out_feature(&feature_name)
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn get_canary_metrics(feature_id: String, group_name: String) -> Option<CanaryMetrics> {
-    CANARY_SERVICE.get_canary_metrics(&feature_id, &group_name)
+pub fn get_canary_opt_in_features() -> Vec<String> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.get_opt_in_features()
+    } else {
+        Vec::new()
+    }
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn promote_canary_feature(feature_id: String) -> Result<(), String> {
-    CANARY_SERVICE.promote_canary_feature(&feature_id)
+pub fn check_canary_metrics() -> Vec<MetricAlert> {
+    check_metrics()
 }
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-pub fn rollback_canary_feature(feature_id: String) -> Result<(), String> {
-    CANARY_SERVICE.rollback_canary_feature(&feature_id)
-}
-
-#[cfg(feature = "tauri")]
-#[tauri::command]
-pub fn create_canary_feature(name: String, description: String, group_name: String, percentage: f64) -> Result<FeatureFlag, String> {
-    CANARY_SERVICE.create_canary_feature(&name, &description, &group_name, percentage)
-}
-
-#[cfg(feature = "tauri")]
-#[tauri::command]
-pub fn toggle_canary_feature(feature_id: String, enabled: bool) -> Result<(), String> {
-    CANARY_SERVICE.toggle_canary_feature(&feature_id, enabled)
+pub fn get_metrics_history(feature_name: String) -> Vec<MetricsComparison> {
+    if let Some(manager) = CANARY_MANAGER.read().unwrap().as_ref() {
+        manager.get_metrics_history(&feature_name)
+    } else {
+        Vec::new()
+    }
 }

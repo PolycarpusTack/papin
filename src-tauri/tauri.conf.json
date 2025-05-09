@@ -1,95 +1,42 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
-    "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev",
-    "devPath": "http://localhost:3000",
-    "distDir": "../dist"
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist",
+    "withGlobalTauri": false
   },
   "package": {
-    "productName": "Claude MCP Client",
-    "version": "0.1.0"
+    "productName": "Papin",
+    "version": "1.0.0"
   },
   "tauri": {
     "allowlist": {
       "all": false,
       "shell": {
         "all": false,
-        "execute": false,
-        "open": true,
-        "scope": [],
-        "sidecar": false
+        "open": true
       },
       "dialog": {
-        "all": false,
-        "ask": true,
-        "confirm": true,
-        "message": true,
-        "open": true,
-        "save": true
-      },
-      "clipboard": {
-        "all": false,
-        "readText": true,
-        "writeText": true
-      },
-      "fs": {
-        "all": false,
-        "readFile": true,
-        "writeFile": true,
-        "readDir": true,
-        "exists": true,
-        "scope": ["$CONFIG/*", "$CONFIG/cache/*"]
-      },
-      "http": {
-        "all": false,
-        "request": true,
-        "scope": ["https://api.anthropic.com/*"]
-      },
-      "notification": {
         "all": true
       },
-      "os": {
-        "all": false
+      "http": {
+        "all": true,
+        "request": true,
+        "scope": ["https://**", "http://**"]
       },
-      "window": {
+      "fs": {
+        "all": true,
+        "scope": ["$APPDATA/**", "$APPCONFIG/**", "$APPLOCAL/**", "$DESKTOP/**", "$DOCUMENT/**"]
+      },
+      "protocol": {
         "all": false,
-        "center": true,
-        "close": true,
-        "create": false,
-        "hide": true,
-        "maximize": true,
-        "minimize": true,
-        "print": false,
-        "requestUserAttention": true,
-        "setAlwaysOnTop": true,
-        "setCursorGrab": false,
-        "setCursorPosition": false,
-        "setCursorVisible": false,
-        "setDecorations": true,
-        "setFocus": true,
-        "setFullscreen": true,
-        "setIcon": true,
-        "setMinSize": true,
-        "setPosition": true,
-        "setResizable": true,
-        "setSize": true,
-        "setSkipTaskbar": false,
-        "setTitle": true,
-        "show": true,
-        "startDragging": true,
-        "unmaximize": true,
-        "unminimize": true
+        "asset": true,
+        "assetScope": ["**"]
       }
     },
     "bundle": {
       "active": true,
-      "category": "Productivity",
-      "copyright": "",
-      "deb": {
-        "depends": []
-      },
-      "externalBin": [],
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",
@@ -97,43 +44,30 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.claude.mcp",
-      "longDescription": "Claude MCP Client for Linux",
-      "macOS": {
-        "entitlements": null,
-        "exceptionDomain": "",
-        "frameworks": [],
-        "providerShortName": null,
-        "signingIdentity": null
-      },
-      "resources": [],
-      "shortDescription": "Claude MCP Client",
-      "targets": ["deb", "appimage"],
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
-      }
+      "identifier": "com.mcp-client.app",
+      "targets": ["deb", "rpm", "appimage", "msi", "dmg", "updater"],
+      "publisher": "MCP Team"
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src 'self' https://api.mcp-client.com https://update.mcp-client.com"
     },
     "updater": {
-      "active": false
+      "active": true,
+      "endpoints": [
+        "https://update.mcp-client.com/{{target}}/{{current_version}}"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMxNEYzODkyRjVCQjk3NjUKUldRTVVLVldVdXRrNC9WVklSVmorenBFODZIajVhUG16NnRKU2xEZ1JhRk9oNFpyRklBUkFBQUIKCg=="
     },
     "windows": [
       {
-        "fullscreen": false,
+        "title": "Papin - an MCP Client",
+        "width": 1200,
         "height": 800,
         "resizable": true,
-        "title": "Claude MCP",
-        "width": 1200,
-        "visible": false
+        "fullscreen": false,
+        "center": true
       }
-    ],
-    "systemTray": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true
-    }
+    ]
   }
 }

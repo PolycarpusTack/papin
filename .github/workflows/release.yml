@@ -1,0 +1,311 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
+      version: ${{ steps.get-version.outputs.version }}
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Get version
+        id: get-version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: MCP Client ${{ steps.get-version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            # MCP Client ${{ steps.get-version.outputs.version }}
+            
+            Please refer to the [CHANGELOG.md](https://github.com/your-org/mcp-client/blob/main/CHANGELOG.md) for details.
+            
+            ## Installation
+            
+            ### Windows
+            - Download the MSI installer and run it
+            - Alternatively, download the portable EXE if you prefer not to install
+            
+            ### macOS
+            - Download the DMG file, open it, and drag the application to your Applications folder
+            
+            ### Linux
+            - For Debian/Ubuntu: `sudo apt install ./mcp-client_${{ steps.get-version.outputs.version }}_amd64.deb`
+            - For Fedora/RHEL: `sudo rpm -i mcp-client-${{ steps.get-version.outputs.version }}.x86_64.rpm`
+            - For other distributions, use the AppImage
+
+  build-and-upload:
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+            artifacts_folder: linux
+          - os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            artifacts_folder: windows
+          - os: macos-latest
+            rust_target: x86_64-apple-darwin
+            artifacts_folder: macos
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.rust_target }}
+          override: true
+      
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      
+      - name: Install frontend dependencies
+        working-directory: ./src-frontend
+        run: npm ci
+      
+      - name: Build frontend
+        working-directory: ./src-frontend
+        run: npm run build
+      
+      - name: Update version
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          # Update version in Cargo.toml
+          sed -i 's/^version = ".*"/version = "'$VERSION'"/' Cargo.toml
+          # Update version in package.json
+          cd src-frontend
+          npm version $VERSION --no-git-tag-version
+          cd ..
+          # Update version in tauri.conf.json
+          sed -i 's/"version": ".*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
+      
+      - name: Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: bash ./installers/linux-build.sh
+      
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: powershell -File ./installers/windows-build.ps1
+      
+      - name: Build (macOS)
+        if: matrix.os == 'macos-latest'
+        run: bash ./installers/macos-build.sh
+      
+      - name: Upload Windows MSI
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/windows/MCP-Client-${{ needs.create-release.outputs.version }}-x64.msi
+          asset_name: MCP-Client-${{ needs.create-release.outputs.version }}-x64.msi
+          asset_content_type: application/octet-stream
+      
+      - name: Upload Windows Portable EXE
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/windows/MCP-Client-Portable.exe
+          asset_name: MCP-Client-${{ needs.create-release.outputs.version }}-Portable.exe
+          asset_content_type: application/octet-stream
+      
+      - name: Upload macOS DMG (Universal)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/macos/MCP-Client-Universal.dmg
+          asset_name: MCP-Client-${{ needs.create-release.outputs.version }}-Universal.dmg
+          asset_content_type: application/octet-stream
+      
+      - name: Upload macOS DMG (Intel)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/macos/MCP-Client-Intel.dmg
+          asset_name: MCP-Client-${{ needs.create-release.outputs.version }}-Intel.dmg
+          asset_content_type: application/octet-stream
+      
+      - name: Upload macOS DMG (Apple Silicon)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/macos/MCP-Client-AppleSilicon.dmg
+          asset_name: MCP-Client-${{ needs.create-release.outputs.version }}-AppleSilicon.dmg
+          asset_content_type: application/octet-stream
+      
+      - name: Upload Linux DEB
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/linux/mcp-client_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_name: mcp-client_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_content_type: application/octet-stream
+      
+      - name: Upload Linux RPM
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/linux/mcp-client-${{ needs.create-release.outputs.version }}.x86_64.rpm
+          asset_name: mcp-client-${{ needs.create-release.outputs.version }}.x86_64.rpm
+          asset_content_type: application/octet-stream
+      
+      - name: Upload Linux AppImage
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./installers/linux/MCP-Client-${{ needs.create-release.outputs.version }}.AppImage
+          asset_name: MCP-Client-${{ needs.create-release.outputs.version }}.AppImage
+          asset_content_type: application/octet-stream
+
+  publish-update-manifest:
+    needs: [create-release, build-and-upload]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create update manifests
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          
+          # Create Windows update manifest
+          cat > update-win.json << EOL
+          {
+            "version": "$VERSION",
+            "notes": "See the release page for details: https://github.com/your-org/mcp-client/releases/tag/v$VERSION",
+            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/your-org/mcp-client/releases/download/v$VERSION/MCP-Client-$VERSION-x64.msi"
+              }
+            }
+          }
+          EOL
+          
+          # Create macOS update manifest
+          cat > update-macos.json << EOL
+          {
+            "version": "$VERSION",
+            "notes": "See the release page for details: https://github.com/your-org/mcp-client/releases/tag/v$VERSION",
+            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "https://github.com/your-org/mcp-client/releases/download/v$VERSION/MCP-Client-$VERSION-Intel.dmg"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "https://github.com/your-org/mcp-client/releases/download/v$VERSION/MCP-Client-$VERSION-AppleSilicon.dmg"
+              }
+            }
+          }
+          EOL
+          
+          # Create Linux update manifest
+          cat > update-linux.json << EOL
+          {
+            "version": "$VERSION",
+            "notes": "See the release page for details: https://github.com/your-org/mcp-client/releases/tag/v$VERSION",
+            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "platforms": {
+              "linux-x86_64": {
+                "signature": "",
+                "url": "https://github.com/your-org/mcp-client/releases/download/v$VERSION/MCP-Client-$VERSION.AppImage"
+              }
+            }
+          }
+          EOL
+      
+      - name: Deploy update manifests
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: updates
+          destination_dir: ./updates
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Update release manifest for v${{ needs.create-release.outputs.version }}'
+          include_files: 'update-win.json,update-macos.json,update-linux.json'
+
+  notify:
+    needs: [create-release, build-and-upload, publish-update-manifest]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send release notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: releases
+          SLACK_COLOR: '#00BFA5'
+          SLACK_ICON: https://github.com/your-org/mcp-client/raw/main/assets/app-icon.png
+          SLACK_MESSAGE: ':rocket: MCP Client v${{ needs.create-release.outputs.version }} has been released! <https://github.com/your-org/mcp-client/releases/tag/v${{ needs.create-release.outputs.version }}|View Release>'
+          SLACK_TITLE: New Release
+          SLACK_USERNAME: GitHub Actions

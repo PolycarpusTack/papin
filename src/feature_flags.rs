@@ -7,33 +7,36 @@ bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
     pub struct FeatureFlags: u32 {
         /// Enable experimental features (may be unstable)
-        const EXPERIMENTAL = 0b0000_0001;
+        const EXPERIMENTAL = 0b0000_0000_0001;
         
         /// Enable development-only features (for testing)
-        const DEV_FEATURES = 0b0000_0010;
+        const DEV_FEATURES = 0b0000_0000_0010;
         
         /// Enable lazy loading of non-essential components
-        const LAZY_LOAD = 0b0000_0100;
+        const LAZY_LOAD = 0b0000_0000_0100;
         
         /// Enable plugin system
-        const PLUGINS = 0b0000_1000;
+        const PLUGINS = 0b0000_0000_1000;
         
         /// Enable conversation history features
-        const HISTORY = 0b0001_0000;
+        const HISTORY = 0b0000_0001_0000;
         
         /// Enable advanced UI components
-        const ADVANCED_UI = 0b0010_0000;
+        const ADVANCED_UI = 0b0000_0010_0000;
         
         /// Enable analytics and telemetry
-        const ANALYTICS = 0b0100_0000;
+        const ANALYTICS = 0b0000_0100_0000;
         
         /// Enable auto-updates
-        const AUTO_UPDATE = 0b1000_0000;
+        const AUTO_UPDATE = 0b0000_1000_0000;
+        
+        /// Enable real-time collaboration features
+        const COLLABORATION = 0b0001_0000_0000;
         
         /// Default configuration for production builds
         const DEFAULT = Self::LAZY_LOAD.bits() | Self::PLUGINS.bits() | 
                         Self::HISTORY.bits() | Self::ADVANCED_UI.bits() | 
-                        Self::AUTO_UPDATE.bits();
+                        Self::AUTO_UPDATE.bits() | Self::COLLABORATION.bits();
         
         /// Minimal configuration for fastest startup
         const MINIMAL = Self::LAZY_LOAD.bits();
@@ -63,6 +66,7 @@ impl FromStr for FeatureFlags {
                 "ADVANCED_UI" => flags |= FeatureFlags::ADVANCED_UI,
                 "ANALYTICS" => flags |= FeatureFlags::ANALYTICS,
                 "AUTO_UPDATE" => flags |= FeatureFlags::AUTO_UPDATE,
+                "COLLABORATION" => flags |= FeatureFlags::COLLABORATION,
                 "DEFAULT" => flags |= FeatureFlags::DEFAULT,
                 "MINIMAL" => flags |= FeatureFlags::MINIMAL,
                 "" => continue,
@@ -144,6 +148,7 @@ mod tests {
         assert!(flags.contains(FeatureFlags::HISTORY));
         assert!(flags.contains(FeatureFlags::ADVANCED_UI));
         assert!(flags.contains(FeatureFlags::AUTO_UPDATE));
+        assert!(flags.contains(FeatureFlags::COLLABORATION));
         
         assert!(!flags.contains(FeatureFlags::EXPERIMENTAL));
         assert!(!flags.contains(FeatureFlags::DEV_FEATURES));
@@ -158,15 +163,17 @@ mod tests {
         assert!(!flags.contains(FeatureFlags::HISTORY));
         assert!(!flags.contains(FeatureFlags::ADVANCED_UI));
         assert!(!flags.contains(FeatureFlags::AUTO_UPDATE));
+        assert!(!flags.contains(FeatureFlags::COLLABORATION));
         assert!(!flags.contains(FeatureFlags::EXPERIMENTAL));
         assert!(!flags.contains(FeatureFlags::DEV_FEATURES));
     }
     
     #[test]
     fn test_from_str() {
-        let flags = FeatureFlags::from_str("EXPERIMENTAL,LAZY_LOAD").unwrap();
+        let flags = FeatureFlags::from_str("EXPERIMENTAL,LAZY_LOAD,COLLABORATION").unwrap();
         assert!(flags.contains(FeatureFlags::EXPERIMENTAL));
         assert!(flags.contains(FeatureFlags::LAZY_LOAD));
+        assert!(flags.contains(FeatureFlags::COLLABORATION));
         assert!(!flags.contains(FeatureFlags::PLUGINS));
     }
     
@@ -174,9 +181,10 @@ mod tests {
     fn test_feature_manager() {
         let mut manager = FeatureManager::default();
         assert!(manager.is_enabled(FeatureFlags::LAZY_LOAD));
+        assert!(manager.is_enabled(FeatureFlags::COLLABORATION));
         
-        manager.disable(FeatureFlags::LAZY_LOAD);
-        assert!(!manager.is_enabled(FeatureFlags::LAZY_LOAD));
+        manager.disable(FeatureFlags::COLLABORATION);
+        assert!(!manager.is_enabled(FeatureFlags::COLLABORATION));
         
         manager.enable(FeatureFlags::EXPERIMENTAL);
         assert!(manager.is_enabled(FeatureFlags::EXPERIMENTAL));

@@ -3,10 +3,12 @@
     windows_subsystem = "windows"
 )]
 
+mod collaboration;
 mod commands;
 mod feature_flags;
 mod models;
 mod protocols;
+mod security;
 mod services;
 mod shell_loader;
 mod utils;
@@ -18,6 +20,7 @@ use tauri::{Manager, WindowBuilder, WindowUrl};
 use tokio::runtime::Runtime;
 
 use crate::feature_flags::{FeatureFlags, FeatureManager};
+use crate::security::{init_security_manager, SecurityConfig, PermissionLevel};
 use crate::shell_loader::{launch_with_fast_shell, ShellLoader};
 use crate::utils::config::Config;
 
@@ -123,6 +126,25 @@ fn main() {
             // Store app handle in state
             let app_handle = app.handle();
             app.manage(Arc::new(Mutex::new(app_handle)));
+            
+            // Initialize security manager
+            let security_config = SecurityConfig {
+                e2ee_enabled: true,
+                use_secure_enclave: true,
+                data_flow_tracking_enabled: true,
+                default_permission_level: PermissionLevel::AskFirstTime,
+                interactive_permissions: true,
+                anonymize_telemetry: true,
+                encrypt_local_storage: true,
+                credential_cache_duration: 600, // 10 minutes
+                clipboard_security_enabled: true,
+            };
+            
+            if let Err(e) = init_security_manager(Some(security_config)) {
+                error!("Failed to initialize security manager: {}", e);
+            } else {
+                info!("Security manager initialized");
+            }
             
             // Start shell loader (this happens in Tokio runtime)
             RUNTIME.spawn(async move {
