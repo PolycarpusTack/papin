@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import './ResourceDashboard.css';
+import LLMPerformanceDashboard from './llm/LLMPerformanceDashboard';
 
 interface MetricTimeSeries {
   timestamp: string;
@@ -65,7 +66,7 @@ interface MetricsData {
 }
 
 const ResourceDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'cpu' | 'memory' | 'network' | 'api' | 'telemetry'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'cpu' | 'memory' | 'network' | 'api' | 'telemetry' | 'llm'>('overview');
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -603,6 +604,12 @@ const ResourceDashboard: React.FC = () => {
         >
           Telemetry
         </button>
+        <button 
+          className={activeTab === 'llm' ? 'active' : ''} 
+          onClick={() => setActiveTab('llm')}
+        >
+          LLM
+        </button>
       </div>
       
       <div className="dashboard-content">
@@ -625,6 +632,7 @@ const ResourceDashboard: React.FC = () => {
             {activeTab === 'network' && renderNetworkTab()}
             {activeTab === 'api' && renderApiTab()}
             {activeTab === 'telemetry' && renderTelemetryTab()}
+            {activeTab === 'llm' && <LLMPerformanceDashboard />}
           </>
         )}
       </div>

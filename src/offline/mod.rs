@@ -10,6 +10,8 @@ use log::{debug, info, warn, error};
 use self::llm::LocalLLM;
 use self::checkpointing::CheckpointManager;
 use self::sync::{SyncManager, SyncConfig};
+use self::llm::discovery::{DiscoveryService, DiscoveryConfig};
+use self::llm::migration::{MigrationService, MigrationConfig, MigrationStatus, MigrationOptions};
 
 /// Offline mode status
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -64,6 +66,8 @@ pub struct OfflineManager {
     llm: Arc<LocalLLM>,
     checkpoint_manager: Arc<Mutex<CheckpointManager>>,
     sync_manager: Arc<SyncManager>,
+    llm_discovery: Arc<DiscoveryService>,
+    llm_migration: Arc<MigrationService>,
     running: Arc<Mutex<bool>>,
 }
 
@@ -82,6 +86,8 @@ impl OfflineManager {
             llm: Arc::new(LocalLLM::new_manager()),
             checkpoint_manager: Arc::new(Mutex::new(CheckpointManager::new())),
             sync_manager: Arc::new(SyncManager::new()),
+            llm_discovery: Arc::new(DiscoveryService::new()),
+            llm_migration: Arc::new(MigrationService::new()),
             running: Arc::new(Mutex::new(false)),
         }
     }
@@ -105,10 +111,43 @@ impl OfflineManager {
             }
         }
         
+        // Start LLM provider discovery service
+        let discovery_service = self.llm_discovery.clone();
+        tokio::spawn(async move {
+            if let Err(e) = discovery_service.start_background_scanner().await {
+                error!("Failed to start LLM provider discovery service: {}", e);
+            }
+        });
+        
         // Start connectivity monitoring
         let status = self.status.clone();
         let config = self.config.clone();
         let running_clone = self.running.clone();
+        
+        // Initialize migration system
+        let migration_service = self.llm_migration.clone();
+        tokio::spawn(async move {
+            match migration_service.detect_legacy_system().await {
+                Ok(true) => {
+                    info!("Legacy LLM system detected. Migration may be required.");
+                    
+                    // Check if auto-migrate is enabled
+                    let migration_config = migration_service.get_config();
+                    if migration_config.auto_migrate {
+                        info!("Automatic migration is enabled. Starting migration...");
+                        if let Err(e) = llm::migration::run_migration(&migration_service).await {
+                            error!("Automatic migration failed: {}", e);
+                        }
+                    }
+                },
+                Ok(false) => {
+                    debug!("No legacy LLM system detected.");
+                },
+                Err(e) => {
+                    error!("Error detecting legacy LLM system: {}", e);
+                }
+            }
+        });
         
         std::thread::spawn(move || {
             while *running_clone.lock().unwrap() {
@@ -173,6 +212,9 @@ impl OfflineManager {
         
         // Stop sync manager
         self.sync_manager.stop();
+        
+        // Stop LLM provider discovery service
+        self.llm_discovery.stop_background_scanner();
     }
     
     /// Check network connectivity
@@ -289,6 +331,47 @@ impl OfflineManager {
     /// Get the sync manager
     pub fn get_sync_manager(&self) -> Arc<SyncManager> {
         self.sync_manager.clone()
+    }
+    
+    /// Get the LLM discovery service
+    pub fn get_llm_discovery(&self) -> Arc<DiscoveryService> {
+        self.llm_discovery.clone()
+    }
+    
+    /// Get the LLM migration service
+    pub fn get_llm_migration(&self) -> Arc<MigrationService> {
+        self.llm_migration.clone()
+    }
+    
+    /// Scan for LLM providers
+    pub async fn scan_for_llm_providers(&self) -> Result<(), String> {
+        match self.llm_discovery.scan_for_providers().await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to scan for LLM providers: {}", e)),
+        }
+    }
+    
+    /// Run LLM migration
+    pub async fn run_llm_migration(&self, options: MigrationOptions) -> Result<llm::migration::MigrationNotification, String> {
+        match self.llm_migration.run_migration(options).await {
+            Ok(notification) => Ok(notification),
+            Err(e) => Err(format!("Failed to run LLM migration: {}", e)),
+        }
+    }
+    
+    /// Get available LLM providers
+    pub fn get_available_providers(&self) -> Vec<crate::commands::offline::llm::ProviderInfo> {
+        self.llm_discovery.create_provider_infos()
+    }
+    
+    /// Get LLM provider suggestions
+    pub fn get_provider_suggestions(&self) -> Vec<llm::discovery::ProviderSuggestion> {
+        self.llm_discovery.get_suggestions()
+    }
+    
+    /// Get LLM provider configurations
+    pub fn get_provider_configs(&self) -> Vec<crate::commands::offline::llm::ProviderConfig> {
+        self.llm_discovery.create_provider_configs()
     }
 }
 

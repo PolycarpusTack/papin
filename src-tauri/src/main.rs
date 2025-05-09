@@ -3,8 +3,10 @@
     windows_subsystem = "windows"
 )]
 
+mod commands;
 mod monitoring;
 mod services;
+mod offline;
 
 use std::collections::HashMap;
 use std::sync::Once;
@@ -137,9 +139,29 @@ fn main() {
             mcp_client::observability::canary::promote_canary_feature,
             mcp_client::observability::canary::rollback_canary_feature,
             mcp_client::observability::canary::create_canary_feature,
-            mcp_client::observability::canary::toggle_canary_feature
+            mcp_client::observability::canary::toggle_canary_feature,
+            
+            // Offline LLM commands
+            commands::offline::configure_llm,
+            commands::offline::list_available_models,
+            commands::offline::list_downloaded_models,
+            commands::offline::get_model_info,
+            commands::offline::download_model,
+            commands::offline::get_download_status,
+            commands::offline::is_model_loaded,
+            commands::offline::load_model,
+            commands::offline::delete_model,
+            commands::offline::generate_text,
+            commands::offline::check_network,
+            commands::offline::get_offline_status,
+            commands::offline::set_offline_mode
         ])
         .setup(|app| {
+            // Register offline commands
+            if let Err(e) = commands::offline::register_commands(app) {
+                log_error!("main", "Failed to register offline commands: {}", e);
+            }
+        
             // Start resource monitor if feature is enabled
             if mcp_client::feature_enabled!(FLAG_RESOURCE_MONITORING) {
                 let monitor = RESOURCE_MONITOR.lock().unwrap();
@@ -191,7 +213,8 @@ fn initialize_feature_flags() {
             name: "Performance Dashboard".to_string(),
             description: "Access to the performance monitoring dashboard".to_string(),
             enabled: true,
-            rollout_strategy: RolloutStrategy::CanaryGroup(CANARY_GROUP_BETA.to_string(), 1.0),
+            rollout_strategy: RolloutStrategy::CanaryGroup(CANARY_GROUP_BETA.to_string(),
+            1.0),
             dependencies: vec![],
             created_at: Utc::now().timestamp(),
             updated_at: Utc::now().timestamp(),

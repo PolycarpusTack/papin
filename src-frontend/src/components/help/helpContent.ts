@@ -2,6 +2,8 @@ export const helpTopics = [
   {
     id: 'getting-started',
     title: 'Getting Started with Papin',
+    id: 'getting-started',
+    title: 'Getting Started with Papin',
     category: 'Basics',
     summary: 'Learn the basics of Papin, from installation to your first conversation.',
     intro: {

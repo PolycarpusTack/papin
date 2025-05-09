@@ -5,6 +5,12 @@ use serde::{Serialize, Deserialize};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
+// LLM discovery subsystem
+pub mod discovery;
+
+// LLM migration subsystem
+pub mod migration;
+
 /// Configuration for a local LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMConfig {
