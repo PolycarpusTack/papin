@@ -1,0 +1,99 @@
+// src-tauri/src/main.rs
+//
+// Main entry point for the Tauri application
+
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
+
+mod commands;
+mod notification;
+mod system;
+
+use log::{debug, info, warn, error};
+use tauri::{Manager, RunEvent, WindowEvent};
+
+fn main() {
+    // Initialize logging
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    
+    info!("Starting Papin application");
+    
+    // Build Tauri application with proper error handling
+    let invoke_handler = tauri::generate_handler![
+        // Register commands
+        commands::offline::get_offline_config,
+        commands::offline::update_offline_config,
+        commands::offline::get_offline_status,
+        commands::offline::go_offline,
+        commands::offline::go_online,
+        commands::offline::scan_for_llm_providers,
+        commands::offline::get_offline_providers,
+        commands::offline::get_provider_suggestions,
+        notification::send_notification,
+        system::platform::get_platform_info,
+        system::platform::get_platform_name,
+        system::platform::show_platform_notification,
+        // Performance monitoring commands
+        commands::performance::get_current_resource_metrics,
+        commands::performance::get_historic_resource_metrics,
+        commands::performance::get_hardware_capabilities,
+        commands::performance::get_resource_recommendations,
+        commands::performance::set_resource_thresholds,
+        commands::performance::is_feature_supported,
+        commands::performance::get_thread_pool_size,
+        commands::performance::get_memory_settings,
+    ];
+    
+    let app = match tauri::Builder::default()
+        .setup(|app| {
+            // Initialize platform-specific features
+            if let Err(e) = system::initialize(&app.app_handle()) {
+                error!("Failed to initialize platform integration: {}", e);
+            }
+            
+            // Get platform info
+            let platform_info = system::platform::PlatformInfo::current();
+            info!("Running on platform: {:?}", platform_info.platform);
+            
+            // Initialize performance monitoring
+            if let Err(e) = commands::performance::register(app) {
+                error!("Failed to initialize performance monitoring: {}", e);
+                // Log error but continue - performance monitoring is not critical
+            }
+            
+            Ok(())
+        })
+        .invoke_handler(invoke_handler)
+        .build(tauri::generate_context!()) {
+            Ok(app) => app,
+            Err(e) => {
+                // Log error and exit gracefully instead of panicking
+                error!("Failed to build Tauri application: {}", e);
+                
+                // In a production app, we might show a native error dialog here
+                // using a platform-specific approach
+                
+                // Exit with error code
+                std::process::exit(1);
+            }
+        };
+    
+    // Run the application with custom event handling
+    app.run(|app_handle, event| match event {
+        RunEvent::WindowEvent { label, event: WindowEvent::CloseRequested { api, .. }, .. } => {
+            if label == "main" {
+                // Get platform integration to handle close request
+                let platform_integration = system::platform::PlatformIntegration::new();
+                let minimize_on_close = true; // This would be loaded from config
+                
+                // If we should minimize instead of closing
+                if !platform_integration.handle_close_requested(app_handle, minimize_on_close) {
+                    api.prevent_close();
+                }
+            }
+        }
+        _ => {}
+    });
+}

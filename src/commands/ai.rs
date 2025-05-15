@@ -2,24 +2,26 @@ use crate::ai::router::NetworkStatus;
 use crate::models::messages::{Message, MessageError};
 use crate::models::Model;
 use crate::services::ai::get_ai_service;
+use crate::commands::error::CommandError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
 
 /// Get available models
 #[tauri::command]
-pub async fn get_available_models() -> Result<Vec<Model>, String> {
+pub async fn get_available_models() -> Result<Vec<Model>, CommandError> {
     Ok(get_ai_service().available_models().await)
 }
 
 /// Set network status
 #[tauri::command]
-pub fn set_network_status(status: String) -> Result<(), String> {
+pub fn set_network_status(status: String) -> Result<(), CommandError> {
+    // Input validation
     let network_status = match status.as_str() {
         "connected" => NetworkStatus::Connected,
         "disconnected" => NetworkStatus::Disconnected,
         "unstable" => NetworkStatus::Unstable,
-        _ => NetworkStatus::Unknown,
+        _ => return Err(CommandError::validation(format!("Invalid network status: {}", status))),
     };
     
     get_ai_service().set_network_status(network_status);
@@ -200,19 +202,30 @@ pub async fn stream_message(
 pub async fn cancel_streaming(
     conversation_id: String,
     message_id: String,
-) -> Result<(), String> {
-    match get_ai_service()
+) -> Result<(), CommandError> {
+    // Input validation
+    if conversation_id.is_empty() {
+        return Err(CommandError::validation("Conversation ID cannot be empty"));
+    }
+    if message_id.is_empty() {
+        return Err(CommandError::validation("Message ID cannot be empty"));
+    }
+    
+    // Use From implementation to convert MessageError to CommandError
+    get_ai_service()
         .cancel_streaming(&conversation_id, &message_id)
         .await
-    {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Failed to cancel streaming: {}", e)),
-    }
+        .map_err(CommandError::from)
 }
 
 /// Get conversation messages
 #[tauri::command]
-pub fn get_messages(conversation_id: String) -> Result<Vec<serde_json::Value>, String> {
+pub fn get_messages(conversation_id: String) -> Result<Vec<serde_json::Value>, CommandError> {
+    // Input validation
+    if conversation_id.is_empty() {
+        return Err(CommandError::validation("Conversation ID cannot be empty"));
+    }
+    
     let messages = get_ai_service().get_messages(&conversation_id);
     
     // Convert to serde_json::Value for serialization
@@ -275,22 +288,39 @@ pub fn get_messages(conversation_id: String) -> Result<Vec<serde_json::Value>, S
 
 /// Create a conversation
 #[tauri::command]
-pub fn create_conversation(title: String, model_id: String) -> Result<serde_json::Value, String> {
+pub fn create_conversation(title: String, model_id: String) -> Result<serde_json::Value, CommandError> {
+    // Input validation
+    if title.is_empty() {
+        return Err(CommandError::validation("Conversation title cannot be empty"));
+    }
+    if model_id.is_empty() {
+        return Err(CommandError::validation("Model ID cannot be empty"));
+    }
+    
     // Find model by ID
     let models = get_ai_service().available_models().await;
     let model = models
         .into_iter()
         .find(|m| m.id == model_id)
-        .ok_or_else(|| format!("Model with ID {} not found", model_id))?;
+        .ok_or_else(|| CommandError::not_found(format!("Model with ID {} not found", model_id)))?;
     
     // Create conversation
     let conversation = get_ai_service().create_conversation(&title, model);
     
-    Ok(serde_json::to_value(conversation).unwrap())
+    // Serialize with proper error handling
+    serde_json::to_value(conversation)
+        .map_err(|e| CommandError::internal(format!("Failed to serialize conversation: {}", e)))
 }
 
 /// Delete a conversation
 #[tauri::command]
-pub fn delete_conversation(id: String) -> Result<(), String> {
-    get_ai_service().delete_conversation(&id)
+pub fn delete_conversation(id: String) -> Result<(), CommandError> {
+    // Input validation
+    if id.is_empty() {
+        return Err(CommandError::validation("Conversation ID cannot be empty"));
+    }
+    
+    get_ai_service()
+        .delete_conversation(&id)
+        .map_err(|e| CommandError::not_found(e))
 }

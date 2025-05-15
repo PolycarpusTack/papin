@@ -3,6 +3,7 @@ use crate::models::messages::{Message, MessageError, ConversationMessage, Messag
 use crate::models::{Conversation, Model};
 use crate::utils::config;
 use crate::utils::events::{events, get_event_system};
+use crate::utils::locks::{SafeLock, SafeRwLock, LockError};
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -35,20 +36,30 @@ impl AiService {
         
         // Set router strategy based on config
         let config = config::get_config();
-        let config_guard = config.lock().unwrap();
         
-        let strategy_str = config_guard
-            .get_string("ai.router.strategy")
-            .unwrap_or_else(|| "prefer_online".to_string());
-        
-        let strategy = match strategy_str.as_str() {
-            "prefer_online" => RouterStrategy::PreferOnline,
-            "prefer_local" => RouterStrategy::PreferLocal,
-            "online_only" => RouterStrategy::OnlineOnly,
-            "local_only" => RouterStrategy::LocalOnly,
-            "round_robin" => RouterStrategy::RoundRobin,
-            "rules_based" => RouterStrategy::RulesBased,
-            _ => RouterStrategy::PreferOnline,
+        // Use SafeLock instead of unwrap()
+        let strategy = match config.safe_lock() {
+            Ok(config_guard) => {
+                let strategy_str = config_guard
+                    .get_string("ai.router.strategy")
+                    .unwrap_or_else(|| "prefer_online".to_string());
+                
+                match strategy_str.as_str() {
+                    "prefer_online" => RouterStrategy::PreferOnline,
+                    "prefer_local" => RouterStrategy::PreferLocal,
+                    "online_only" => RouterStrategy::OnlineOnly,
+                    "local_only" => RouterStrategy::LocalOnly,
+                    "round_robin" => RouterStrategy::RoundRobin,
+                    "rules_based" => RouterStrategy::RulesBased,
+                    _ => RouterStrategy::PreferOnline,
+                }
+            },
+            Err(e) => {
+                // Log error but use a default strategy
+                error!("Failed to acquire config lock: {}", e);
+                warn!("Using default router strategy (PreferOnline) due to lock error");
+                RouterStrategy::PreferOnline
+            }
         };
         
         router.set_strategy(strategy);
@@ -68,9 +79,15 @@ impl AiService {
             loop {
                 match get_model_router().get_available_models().await {
                     models => {
-                        // Update cache
-                        let mut models_guard = models_clone.write().unwrap();
-                        *models_guard = models;
+                        // Update cache - use SafeRwLock instead of unwrap()
+                        match models_clone.safe_write() {
+                            Ok(mut models_guard) => {
+                                *models_guard = models;
+                            },
+                            Err(e) => {
+                                error!("Failed to acquire write lock on models: {}", e);
+                            }
+                        }
                     }
                 }
                 
@@ -91,9 +108,16 @@ impl AiService {
     pub async fn available_models(&self) -> Vec<Model> {
         // Check cache first
         {
-            let models = self.models.read().unwrap();
-            if !models.is_empty() {
-                return models.clone();
+            match self.models.safe_read() {
+                Ok(models) => {
+                    if !models.is_empty() {
+                        return models.clone();
+                    }
+                },
+                Err(e) => {
+                    error!("Failed to acquire read lock on models: {}", e);
+                    // Continue to fetching from router
+                }
             }
         }
         
@@ -102,8 +126,15 @@ impl AiService {
         
         // Update cache
         {
-            let mut models_guard = self.models.write().unwrap();
-            *models_guard = models.clone();
+            match self.models.safe_write() {
+                Ok(mut models_guard) => {
+                    *models_guard = models.clone();
+                },
+                Err(e) => {
+                    error!("Failed to acquire write lock on models: {}", e);
+                    // Continue with returning the models we fetched
+                }
+            }
         }
         
         models
@@ -114,9 +145,14 @@ impl AiService {
         let conversation = Conversation::new(title, model);
         
         // Store conversation
-        {
-            let mut conversations = self.conversations.write().unwrap();
-            conversations.insert(conversation.id.clone(), Vec::new());
+        match self.conversations.safe_write() {
+            Ok(mut conversations) => {
+                conversations.insert(conversation.id.clone(), Vec::new());
+            },
+            Err(e) => {
+                error!("Failed to acquire write lock on conversations: {}", e);
+                // Even if we fail to store, return the conversation object
+            }
         }
         
         conversation
@@ -132,16 +168,32 @@ impl AiService {
     pub fn delete_conversation(&self, id: &str) -> Result<(), String> {
         // Remove conversation messages
         {
-            let mut conversations = self.conversations.write().unwrap();
-            if conversations.remove(id).is_none() {
-                return Err(format!("Conversation {} not found", id));
+            match self.conversations.safe_write() {
+                Ok(mut conversations) => {
+                    if conversations.remove(id).is_none() {
+                        return Err(format!("Conversation {} not found", id));
+                    }
+                },
+                Err(e) => {
+                    let error_msg = format!("Failed to acquire write lock on conversations: {}", e);
+                    error!("{}", error_msg);
+                    return Err(error_msg);
+                }
             }
         }
         
         // Remove listeners
         {
-            let mut listeners = self.message_listeners.lock().unwrap();
-            listeners.remove(id);
+            match self.message_listeners.safe_lock() {
+                Ok(mut listeners) => {
+                    listeners.remove(id);
+                },
+                Err(e) => {
+                    let error_msg = format!("Failed to acquire lock on message listeners: {}", e);
+                    error!("{}", error_msg);
+                    return Err(error_msg);
+                }
+            }
         }
         
         Ok(())
@@ -149,11 +201,18 @@ impl AiService {
     
     /// Get conversation message history
     pub fn get_messages(&self, conversation_id: &str) -> Vec<ConversationMessage> {
-        let conversations = self.conversations.read().unwrap();
-        conversations
-            .get(conversation_id)
-            .cloned()
-            .unwrap_or_default()
+        match self.conversations.safe_read() {
+            Ok(conversations) => {
+                conversations
+                    .get(conversation_id)
+                    .cloned()
+                    .unwrap_or_default()
+            },
+            Err(e) => {
+                error!("Failed to acquire read lock on conversations: {}", e);
+                Vec::new() // Return empty vector instead of panicking
+            }
+        }
     }
     
     /// Send a message in a conversation
@@ -274,8 +333,15 @@ impl AiService {
                 // Store streaming session
                 let stream_id = Uuid::new_v4().to_string();
                 {
-                    let mut sessions = self.streaming_sessions.lock().unwrap();
-                    sessions.insert(stream_id.clone(), stream);
+                    match self.streaming_sessions.safe_lock() {
+                        Ok(mut sessions) => {
+                            sessions.insert(stream_id.clone(), stream);
+                        },
+                        Err(e) => {
+                            error!("Failed to acquire lock on streaming sessions: {}", e);
+                            // Continue with streaming even if we couldn't store the session
+                        }
+                    }
                 }
                 
                 // Handle streaming in a separate task
@@ -305,13 +371,20 @@ impl AiService {
                                     
                                     // Update in history
                                     {
-                                        let mut convos = conversations.write().unwrap();
-                                        if let Some(messages) = convos.get_mut(&conversation_id) {
-                                            for msg in messages.iter_mut() {
-                                                if msg.message.id == response_id {
-                                                    *msg = response_message.clone();
-                                                    break;
+                                        match conversations.safe_write() {
+                                            Ok(mut convos) => {
+                                                if let Some(messages) = convos.get_mut(&conversation_id) {
+                                                    for msg in messages.iter_mut() {
+                                                        if msg.message.id == response_id {
+                                                            *msg = response_message.clone();
+                                                            break;
+                                                        }
+                                                    }
                                                 }
+                                            },
+                                            Err(e) => {
+                                                error!("Failed to acquire write lock on conversations in streaming task: {}", e);
+                                                // Continue sending updates to UI even if we couldn't update history
                                             }
                                         }
                                     }
@@ -328,13 +401,20 @@ impl AiService {
                                 
                                 // Update in history
                                 {
-                                    let mut convos = conversations.write().unwrap();
-                                    if let Some(messages) = convos.get_mut(&conversation_id) {
-                                        for msg in messages.iter_mut() {
-                                            if msg.message.id == response_id {
-                                                *msg = response_message.clone();
-                                                break;
+                                    match conversations.safe_write() {
+                                        Ok(mut convos) => {
+                                            if let Some(messages) = convos.get_mut(&conversation_id) {
+                                                for msg in messages.iter_mut() {
+                                                    if msg.message.id == response_id {
+                                                        *msg = response_message.clone();
+                                                        break;
+                                                    }
+                                                }
                                             }
+                                        },
+                                        Err(e) => {
+                                            error!("Failed to acquire write lock on conversations in error handler: {}", e);
+                                            // Continue sending updates to UI even if we couldn't update history
                                         }
                                     }
                                 }
@@ -354,13 +434,20 @@ impl AiService {
                         
                         // Update in history
                         {
-                            let mut convos = conversations.write().unwrap();
-                            if let Some(messages) = convos.get_mut(&conversation_id) {
-                                for msg in messages.iter_mut() {
-                                    if msg.message.id == response_id {
-                                        *msg = response_message.clone();
-                                        break;
+                            match conversations.safe_write() {
+                                Ok(mut convos) => {
+                                    if let Some(messages) = convos.get_mut(&conversation_id) {
+                                        for msg in messages.iter_mut() {
+                                            if msg.message.id == response_id {
+                                                *msg = response_message.clone();
+                                                break;
+                                            }
+                                        }
                                     }
+                                },
+                                Err(e) => {
+                                    error!("Failed to acquire write lock on conversations in streaming completion: {}", e);
+                                    // Continue sending updates to UI even if we couldn't update history
                                 }
                             }
                         }
@@ -408,11 +495,18 @@ impl AiService {
         
         // Store listener
         {
-            let mut listeners = self.message_listeners.lock().unwrap();
-            let conversation_listeners = listeners
-                .entry(conversation_id.to_string())
-                .or_insert_with(Vec::new);
-            conversation_listeners.push(tx);
+            match self.message_listeners.safe_lock() {
+                Ok(mut listeners) => {
+                    let conversation_listeners = listeners
+                        .entry(conversation_id.to_string())
+                        .or_insert_with(Vec::new);
+                    conversation_listeners.push(tx.clone());
+                },
+                Err(e) => {
+                    error!("Failed to acquire lock on message listeners: {}", e);
+                    // Continue to send existing messages even if we couldn't register
+                }
+            }
         }
         
         // Send existing messages
@@ -432,11 +526,18 @@ impl AiService {
     fn add_message_to_history(&self, conversation_id: &str, message: ConversationMessage) {
         // Add to history
         {
-            let mut conversations = self.conversations.write().unwrap();
-            let conversation_messages = conversations
-                .entry(conversation_id.to_string())
-                .or_insert_with(Vec::new);
-            conversation_messages.push(message.clone());
+            match self.conversations.safe_write() {
+                Ok(mut conversations) => {
+                    let conversation_messages = conversations
+                        .entry(conversation_id.to_string())
+                        .or_insert_with(Vec::new);
+                    conversation_messages.push(message.clone());
+                },
+                Err(e) => {
+                    error!("Failed to acquire write lock on conversations: {}", e);
+                    // Still try to notify listeners even if we couldn't update history
+                }
+            }
         }
         
         // Notify listeners
@@ -449,14 +550,21 @@ impl AiService {
         
         // Update in history
         {
-            let mut conversations = self.conversations.write().unwrap();
-            if let Some(messages) = conversations.get_mut(conversation_id) {
-                for msg in messages.iter_mut() {
-                    if msg.message.id == message_id {
-                        msg.status = status;
-                        updated_message = Some(msg.clone());
-                        break;
+            match self.conversations.safe_write() {
+                Ok(mut conversations) => {
+                    if let Some(messages) = conversations.get_mut(conversation_id) {
+                        for msg in messages.iter_mut() {
+                            if msg.message.id == message_id {
+                                msg.status = status;
+                                updated_message = Some(msg.clone());
+                                break;
+                            }
+                        }
                     }
+                },
+                Err(e) => {
+                    error!("Failed to acquire write lock on conversations: {}", e);
+                    // Can't update message status
                 }
             }
         }
@@ -469,16 +577,23 @@ impl AiService {
     
     /// Notify all listeners for a conversation
     fn notify_listeners(&self, conversation_id: &str, message: &ConversationMessage) {
-        let listeners = self.message_listeners.lock().unwrap();
-        if let Some(conversation_listeners) = listeners.get(conversation_id) {
-            let message = message.clone();
-            for listener in conversation_listeners {
-                let tx = listener.clone();
-                let message = message.clone();
-                
-                tokio::spawn(async move {
-                    let _ = tx.send(message).await;
-                });
+        match self.message_listeners.safe_lock() {
+            Ok(listeners) => {
+                if let Some(conversation_listeners) = listeners.get(conversation_id) {
+                    let message = message.clone();
+                    for listener in conversation_listeners {
+                        let tx = listener.clone();
+                        let message = message.clone();
+                        
+                        tokio::spawn(async move {
+                            let _ = tx.send(message).await;
+                        });
+                    }
+                }
+            },
+            Err(e) => {
+                error!("Failed to acquire lock on message listeners: {}", e);
+                // Can't notify listeners
             }
         }
     }

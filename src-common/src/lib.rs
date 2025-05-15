@@ -1,6 +1,8 @@
 pub mod config;
 pub mod error;
 pub mod models;
+pub mod observability;
+pub mod platform;
 pub mod protocol;
 pub mod service;
 pub mod utils;
