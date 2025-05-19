@@ -1,18 +1,20 @@
-use chrono::{DateTime, Utc, NaiveDate, Local};
+// src-common/src/observability/logging.rs
+// Enhanced to use platform-agnostic file operations
+
+use chrono::{DateTime, Local, NaiveDate, Utc};
 use colored::Colorize;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::fs::{self, File};
 use std::io::{self, Write};
-use std::fs::{self, File, OpenOptions, create_dir_all};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
-use std::ops::Add;
+use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
-use crate::observability::telemetry::TelemetryClient;
-use crate::observability::metrics::ObservabilityConfig;
 use crate::error::Result;
+use crate::observability::metrics::ObservabilityConfig;
+use crate::observability::telemetry::TelemetryClient;
+use crate::platform::fs::{platform_fs, PlatformFsError, PathExt};
 
 // Define log levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -36,7 +38,7 @@ impl LogLevel {
             LogLevel::Fatal => "FATAL",
         }
     }
-    
+
     pub fn from_u8(value: u8) -> Self {
         match value {
             0 => LogLevel::Trace,
@@ -48,7 +50,7 @@ impl LogLevel {
             _ => LogLevel::Info,
         }
     }
-    
+
     pub fn from_str(value: &str) -> Self {
         match value.to_uppercase().as_str() {
             "TRACE" => LogLevel::Trace,
@@ -60,7 +62,7 @@ impl LogLevel {
             _ => LogLevel::Info,
         }
     }
-    
+
     pub fn color_string(&self, text: &str) -> colored::ColoredString {
         match self {
             LogLevel::Trace => text.bright_black(),
@@ -87,6 +89,33 @@ pub struct LogEntry {
     pub stacktrace: Option<String>,
 }
 
+// Log rotation configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogRotationConfig {
+    // Enable log rotation
+    pub enabled: bool,
+    
+    // Maximum file size in bytes before rotation
+    pub max_file_size: u64,
+    
+    // Maximum number of log files to keep
+    pub max_files: usize,
+    
+    // Compress rotated logs
+    pub compress: bool,
+}
+
+impl Default for LogRotationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_file_size: 10 * 1024 * 1024, // 10 MB
+            max_files: 10,
+            compress: true,
+        }
+    }
+}
+
 // Logger configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggerConfig {
@@ -103,6 +132,7 @@ pub struct LoggerConfig {
     pub rotate_daily: bool,
     pub log_to_remote: bool,
     pub remote_url: Option<String>,
+    pub rotation: LogRotationConfig,
 }
 
 impl Default for LoggerConfig {
@@ -121,6 +151,7 @@ impl Default for LoggerConfig {
             rotate_daily: true,
             log_to_remote: false,
             remote_url: None,
+            rotation: LogRotationConfig::default(),
         }
     }
 }
@@ -211,33 +242,25 @@ pub struct Logger {
 
 impl Logger {
     pub fn new(config: LoggerConfig, telemetry_client: Option<Arc<TelemetryClient>>) -> Self {
+        let fs = platform_fs();
+        
         let (log_file, log_file_path) = if config.file_enabled {
             if let Some(log_path) = &config.file_path {
                 // Create the directory if it doesn't exist
                 if let Some(parent) = Path::new(log_path).parent() {
-                    let _ = create_dir_all(parent);
+                    let _ = fs.ensure_dir_exists(parent);
                 }
                 
-                let file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(log_path)
-                    .ok();
-                    
+                let file = fs.create_file(Path::new(log_path)).ok();
                 (file.map(|f| Arc::new(RwLock::new(f))), Some(PathBuf::from(log_path)))
             } else {
                 let default_path = Self::default_log_path();
                 // Create the directory if it doesn't exist
                 if let Some(parent) = default_path.parent() {
-                    let _ = create_dir_all(parent);
+                    let _ = fs.ensure_dir_exists(parent);
                 }
                 
-                let file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&default_path)
-                    .ok();
-                    
+                let file = fs.create_file(&default_path).ok();
                 (file.map(|f| Arc::new(RwLock::new(f))), Some(default_path))
             }
         } else {
@@ -256,43 +279,13 @@ impl Logger {
     }
     
     fn default_log_path() -> PathBuf {
-        let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let fs = platform_fs();
         
-        // Platform-specific log directory
-        #[cfg(target_os = "windows")]
-        {
-            path.push("AppData");
-            path.push("Roaming");
-            path.push("MCP");
-            path.push("logs");
-        }
-        
-        #[cfg(target_os = "macos")]
-        {
-            path.push("Library");
-            path.push("Logs");
-            path.push("MCP");
-        }
-        
-        #[cfg(target_os = "linux")]
-        {
-            path.push(".local");
-            path.push("share");
-            path.push("mcp");
-            path.push("logs");
-        }
-        
-        // Ensure directory exists
-        if !path.exists() {
-            let _ = create_dir_all(&path);
-        }
-        
-        // Add timestamp to log file name
-        let now = Local::now();
-        let filename = format!("mcp_{}.log", now.format("%Y-%m-%d"));
-        path.push(filename);
-        
-        path
+        // Use platform-agnostic logs directory
+        fs.logs_dir("Papin").unwrap_or_else(|_| {
+            // Fallback to current directory
+            PathBuf::from("logs")
+        }).join(format!("papin_{}.log", Local::now().format("%Y-%m-%d")))
     }
     
     pub fn log(&self, level: LogLevel, module: &str, message: &str, context: Option<HashMap<String, String>>, stacktrace: Option<String>) {
@@ -456,31 +449,28 @@ impl Logger {
     }
     
     fn rotate_log_file_size(&self, path: &Path) {
+        let fs = platform_fs();
         let max_files = self.config.read().unwrap().max_log_files;
         
         // Implement log rotation by size
         for i in (1..max_files).rev() {
             let src = path.with_extension(format!("log.{}", i));
             let dst = path.with_extension(format!("log.{}", i + 1));
-            if src.exists() {
-                let _ = std::fs::rename(src, dst);
+            if fs.file_exists(&src) {
+                let _ = fs.rename_file(&src, &dst);
             }
         }
         
         let src = path;
         let dst = path.with_extension("log.1");
-        let _ = std::fs::rename(src, dst);
+        let _ = fs.rename_file(src, &dst);
         
         // Create a new log file
         if let Some(parent) = path.parent() {
-            let _ = create_dir_all(parent);
+            let _ = fs.ensure_dir_exists(parent);
         }
         
-        if let Ok(file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path) {
-            
+        if let Ok(file) = fs.create_file(path) {
             if let Some(log_file) = &self.log_file {
                 let mut guard = log_file.write().unwrap();
                 *guard = file;
@@ -489,6 +479,8 @@ impl Logger {
     }
     
     fn rotate_log_file_daily(&self, path: &Path, today: NaiveDate) {
+        let fs = platform_fs();
+        
         // Create new file name with date
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
@@ -502,16 +494,12 @@ impl Logger {
         let archive_path = parent.join(archive_name);
         
         // Rename the current log file to the archive name
-        if path.exists() {
-            let _ = std::fs::rename(path, archive_path);
+        if fs.file_exists(path) {
+            let _ = fs.rename_file(path, &archive_path);
         }
         
         // Create a new log file
-        if let Ok(file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path) {
-            
+        if let Ok(file) = fs.create_file(path) {
             if let Some(log_file) = &self.log_file {
                 let mut guard = log_file.write().unwrap();
                 *guard = file;
@@ -523,6 +511,7 @@ impl Logger {
     }
     
     fn clean_old_logs(&self, dir: &Path) {
+        let fs = platform_fs();
         let max_files = self.config.read().unwrap().max_log_files as usize;
         
         // Get all log files in directory
@@ -549,7 +538,7 @@ impl Logger {
             // Remove oldest files if we have too many
             if log_files.len() > max_files {
                 for (path, _) in log_files.iter().skip(max_files) {
-                    let _ = fs::remove_file(path);
+                    let _ = fs.remove_file(path);
                 }
             }
         }
@@ -597,6 +586,7 @@ impl Logger {
     
     // Export logs to a file
     pub fn export_logs(&self, path: &str, format: ExportFormat, filters: Option<LogFilters>) -> Result<()> {
+        let fs = platform_fs();
         let buffer = self.in_memory_buffer.read().unwrap();
         
         // Apply filters if provided
@@ -670,14 +660,15 @@ impl Logger {
             },
         };
         
-        // Write to file
-        fs::write(path, content)?;
+        // Write to file using platform FS
+        fs.write_string(Path::new(path), &content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         
         Ok(())
     }
     
     // Update logger configuration
     pub fn update_config(&self, new_config: LoggerConfig) -> Result<()> {
+        let fs = platform_fs();
         let old_config = self.config.read().unwrap().clone();
         
         // Check if file path changed or file logging was enabled
@@ -698,13 +689,10 @@ impl Logger {
             if let Some(log_path) = &new_config.file_path {
                 // Create the directory if it doesn't exist
                 if let Some(parent) = Path::new(log_path).parent() {
-                    let _ = create_dir_all(parent);
+                    let _ = fs.ensure_dir_exists(parent);
                 }
                 
-                let file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(log_path)?;
+                let file = fs.create_file(Path::new(log_path))?;
                     
                 self.log_file = Some(Arc::new(RwLock::new(file)));
                 self.log_file_path = Some(PathBuf::from(log_path));
@@ -758,6 +746,7 @@ pub fn init_logger(config: &ObservabilityConfig, telemetry_client: Option<Arc<Te
         rotate_daily: true,
         log_to_remote: false,
         remote_url: None,
+        rotation: LogRotationConfig::default(),
     };
     
     let logger = Logger::new(logger_config, telemetry_client);
@@ -766,7 +755,7 @@ pub fn init_logger(config: &ObservabilityConfig, telemetry_client: Option<Arc<Te
     *LOGGER.write().unwrap() = Some(logger);
     
     // Log initialization
-    log_info!("logger", "Logger initialized");
+    log_info!("logger", "Logger initialized with platform-agnostic file operations");
 }
 
 // Logger macros for easy use

@@ -34,3 +34,5 @@ yarn-error.log*
 
 # Local configuration
 config.json
+
+**/.claude/settings.local.json

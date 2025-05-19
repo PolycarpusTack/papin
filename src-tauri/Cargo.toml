@@ -18,7 +18,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "1.4.0", features = ["dialog-ask", "dialog-confirm", "dialog-message", "dialog-open", "dialog-save", "clipboard-read-text", "clipboard-write-text", "fs-exists", "fs-read-dir", "fs-read-file", "fs-write-file", "http-request", "notification-all", "window-center", "window-close", "window-hide", "window-maximize", "window-minimize", "window-request-user-attention", "window-set-always-on-top", "window-set-decorations", "window-set-focus", "window-set-fullscreen", "window-set-icon", "window-set-min-size", "window-set-position", "window-set-resizable", "window-set-size", "window-set-title", "window-show", "window-start-dragging", "window-unmaximize", "window-unminimize", "shell-open"] }
 tokio = { version = "1.28.1", features = ["full"] }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", features = ["json", "stream"] }
 once_cell = "1.18.0"
 log = "0.4.19"
 env_logger = "0.10.0"
@@ -42,6 +42,10 @@ tempfile = "3.5.0"
 zip = "0.6.4"
 chrono = { version = "0.4.24", features = ["serde"] }
 dirs = "5.0.1"
+app-dirs = "1.0.2" # Added for the app data directory
+app-info = "0.1.0" # Added for the app info
+ctrlc = "3.2.5" # Added for shutdown handling
+mcp-client = { path = "../src-common" } # Local crate for shared code
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
@@ -51,3 +55,5 @@ custom-protocol = ["tauri/custom-protocol"]
 experimental = []
 # Enables development-only features
 dev = []
+# Enables frontend integration
+frontend = []

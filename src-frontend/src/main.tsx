@@ -1,29 +1,21 @@
+// src-frontend/src/main.tsx
+//
+// React entry point
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
-import './index.css';
+import './styles/global.css';
 
-// Performance measurement for bootstrap time
-const startTime = performance.now();
+// Determine the root element
+const rootElement = document.getElementById('root') as HTMLElement;
 
-// Log startup metrics
-document.addEventListener('DOMContentLoaded', () => {
-  const loadTime = performance.now() - startTime;
-  console.log(`DOM loaded in ${loadTime.toFixed(2)}ms`);
-});
-
-// Initial render must be as fast as possible (<500ms goal)
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+// Create the root and render the app
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+    <BrowserRouter basename="/">
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
 );
-
-// Log total render time
-window.addEventListener('load', () => {
-  const totalTime = performance.now() - startTime;
-  console.log(`Total load time: ${totalTime.toFixed(2)}ms`);
-  
-  // Send metrics to backend (would be implemented in real app)
-  // invoke('log_performance', { metric: 'initial_load', value: totalTime });
-});

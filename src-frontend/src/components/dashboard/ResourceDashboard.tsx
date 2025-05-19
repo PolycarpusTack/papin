@@ -1,633 +1,777 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import './ResourceDashboard.css';
+import { listen } from '@tauri-apps/api/event';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Card, CardHeader, CardContent, CardFooter } from '../../ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
+import { Skeleton } from '../../ui/skeleton';
+import { Alert, AlertDescription } from '../../ui/alert';
+import { Button } from '../../ui/button';
+import { Progress } from '../../ui/progress';
+import { Badge } from '../../ui/badge';
+import { Separator } from '../../ui/separator';
+import { usePlatform } from '../../hooks/usePlatform';
+import { 
+  CpuIcon, 
+  MemoryIcon, 
+  HardDriveIcon, 
+  NetworkIcon, 
+  RefreshCwIcon,
+  AlertTriangleIcon,
+  GlobeIcon,
+  ClockIcon,
+  BarChart2Icon
+} from '../../ui/icons';
 
-interface MetricTimeSeries {
-  timestamp: string;
+// Types for the metrics data
+interface MetricPoint {
+  timestamp: number;
   value: number;
 }
 
-interface HistogramStats {
-  min: number;
-  max: number;
-  avg: number;
-  count: number;
-  p50: number;
-  p90: number;
-  p99: number;
+interface SystemMetrics {
+  cpu: {
+    usage: number;
+    temperature: number;
+    history: MetricPoint[];
+  };
+  memory: {
+    total: number;
+    used: number;
+    available: number;
+    history: MetricPoint[];
+  };
+  disk: {
+    total: number;
+    used: number;
+    available: number;
+    readRate: number;
+    writeRate: number;
+    history: MetricPoint[];
+  };
+  network: {
+    status: 'online' | 'offline' | 'limited';
+    downloadRate: number;
+    uploadRate: number;
+    latency: number;
+    history: MetricPoint[];
+  }
 }
 
-interface TimerStats {
-  min_ms: number;
-  max_ms: number;
-  avg_ms: number;
-  count: number;
-  p50_ms: number;
-  p90_ms: number;
-  p99_ms: number;
-}
+// Initial empty state
+const initialMetrics: SystemMetrics = {
+  cpu: { usage: 0, temperature: 0, history: [] },
+  memory: { total: 0, used: 0, available: 0, history: [] },
+  disk: { total: 0, used: 0, available: 0, readRate: 0, writeRate: 0, history: [] },
+  network: { status: 'offline', downloadRate: 0, uploadRate: 0, latency: 0, history: [] }
+};
 
-interface SystemResources {
-  cpu_usage: number;
-  memory_usage: number;
-  memory_total: number;
-  disk_usage: number;
-  disk_total: number;
-  network_rx: number;
-  network_tx: number;
-}
-
-interface TelemetryStats {
-  events_collected: number;
-  events_sent: number;
-  metrics_collected: number;
-  metrics_sent: number;
-  logs_collected: number;
-  logs_sent: number;
-  batches_sent: number;
-  batches_failed: number;
-  last_batch_sent?: string;
-}
-
-interface MetricsData {
-  counters: Record<string, number>;
-  gauges: Record<string, number>;
-  histograms: Record<string, HistogramStats>;
-  timers: Record<string, TimerStats>;
-  
-  cpu_history: MetricTimeSeries[];
-  memory_history: MetricTimeSeries[];
-  api_latency_history: MetricTimeSeries[];
-  
-  system: SystemResources;
-  telemetry: TelemetryStats;
-}
-
+/**
+ * ResourceDashboard Component
+ * 
+ * Displays system resource metrics with real-time updates and historical data charts.
+ * Features platform-specific optimizations and responsive design.
+ */
 const ResourceDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'cpu' | 'memory' | 'network' | 'api' | 'telemetry'>('overview');
-  const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [metrics, setMetrics] = useState<SystemMetrics>(initialMetrics);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('overview');
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
-  const [refreshInterval, setRefreshInterval] = useState<number>(5000);
+  const { platform, isMacOS, isWindows, isLinux } = usePlatform();
 
-  // Fetch metrics data
+  // Format bytes to human-readable format
+  const formatBytes = (bytes: number, decimals = 2): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
+
+  // Fetch metrics from backend
   const fetchMetrics = async () => {
     try {
-      setLoading(true);
-      
-      // Invoke Tauri commands to get metrics
-      const [
-        counters,
-        gauges,
-        histograms,
-        timers,
-        cpuHistory,
-        memoryHistory,
-        apiLatencyHistory,
-        systemResources,
-        telemetryStats
-      ] = await Promise.all([
-        invoke('get_counters_report'),
-        invoke('get_gauges_report'),
-        invoke('get_histograms_report'),
-        invoke('get_timers_report'),
-        invoke('get_metric_history', { metricName: 'system.cpu_usage', metricType: 'Gauge' }),
-        invoke('get_metric_history', { metricName: 'system.memory_usage', metricType: 'Gauge' }),
-        invoke('get_metric_history', { metricName: 'api.latency', metricType: 'Timer' }),
-        invoke('get_system_resources'),
-        invoke('get_telemetry_stats')
-      ]);
-      
-      setMetrics({
-        counters: counters as Record<string, number>,
-        gauges: gauges as Record<string, number>,
-        histograms: histograms as Record<string, HistogramStats>,
-        timers: timers as Record<string, TimerStats>,
-        cpu_history: cpuHistory as MetricTimeSeries[],
-        memory_history: memoryHistory as MetricTimeSeries[],
-        api_latency_history: apiLatencyHistory as MetricTimeSeries[],
-        system: systemResources as SystemResources,
-        telemetry: telemetryStats as TelemetryStats
-      });
-      
+      const systemMetrics = await invoke<SystemMetrics>('get_system_metrics');
+      setMetrics(systemMetrics);
       setError(null);
     } catch (err) {
-      console.error('Error fetching metrics:', err);
-      setError(`Failed to fetch metrics: ${err}`);
+      console.error('Failed to fetch metrics:', err);
+      setError(`Failed to fetch system metrics: ${err}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Set up auto-refresh
+  // Setup initial data fetch and event listeners
   useEffect(() => {
     fetchMetrics();
     
-    let intervalId: number;
-    
+    // Subscribe to metric updates from backend
+    const unsubscribe = listen<SystemMetrics>('metrics-update', (event) => {
+      setMetrics(event.payload);
+    });
+
+    // Setup auto-refresh interval
+    let interval: NodeJS.Timeout | null = null;
     if (autoRefresh) {
-      intervalId = window.setInterval(fetchMetrics, refreshInterval);
+      interval = setInterval(fetchMetrics, 5000); // Refresh every 5 seconds
     }
-    
+
+    // Cleanup
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      unsubscribe.then(unsub => unsub());
+      if (interval) clearInterval(interval);
     };
-  }, [autoRefresh, refreshInterval]);
+  }, [autoRefresh]);
 
-  // Format bytes to a human-readable format
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  // Apply platform-specific optimizations
+  const getRefreshInterval = () => {
+    if (isMacOS) return 5000; // macOS uses default 5s
+    if (isWindows) return 3000; // Windows refreshes faster
+    if (isLinux) return 7000; // Linux uses more conservative refresh
+    return 5000; // Default fallback
   };
 
-  // Format milliseconds for display
-  const formatTime = (ms: number): string => {
-    if (ms < 1) {
-      return `${(ms * 1000).toFixed(2)} μs`;
-    } else if (ms < 1000) {
-      return `${ms.toFixed(2)} ms`;
+  // Platform-specific rendering optimizations
+  const renderPlatformOptimized = () => {
+    if (isMacOS) {
+      // macOS-specific styling or components
+      return (
+        <Badge variant="outline" className="ml-2">
+          macOS Optimized
+        </Badge>
+      );
+    } else if (isWindows) {
+      // Windows-specific styling or components
+      return (
+        <Badge variant="outline" className="ml-2">
+          Windows Optimized
+        </Badge>
+      );
+    } else if (isLinux) {
+      // Linux-specific styling or components
+      return (
+        <Badge variant="outline" className="ml-2">
+          Linux Optimized
+        </Badge>
+      );
+    }
+    return null;
+  };
+
+  // Different chart colors based on platform
+  const getChartColors = () => {
+    if (isMacOS) {
+      return {
+        cpu: '#34c759',
+        memory: '#5ac8fa',
+        disk: '#ff9500',
+        network: '#af52de'
+      };
+    } else if (isWindows) {
+      return {
+        cpu: '#0078d7',
+        memory: '#7986cb',
+        disk: '#ff8f00',
+        network: '#00b0ff'
+      };
     } else {
-      return `${(ms / 1000).toFixed(2)} s`;
+      return {
+        cpu: '#26a69a',
+        memory: '#42a5f5',
+        disk: '#ffb300',
+        network: '#5c6bc0'
+      };
     }
   };
 
-  // Render overview tab
-  const renderOverview = () => {
-    if (!metrics) return null;
-    
-    return (
-      <div className="overview-grid">
-        <div className="metric-card">
-          <h3>CPU Usage</h3>
-          <div className="metric-value">{metrics.system.cpu_usage.toFixed(1)}%</div>
-          <ResponsiveContainer width="100%" height={100}>
-            <LineChart data={metrics.cpu_history}>
-              <Line type="monotone" dataKey="value" stroke="#8884d8" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="metric-card">
-          <h3>Memory Usage</h3>
-          <div className="metric-value">
-            {formatBytes(metrics.system.memory_usage)} / {formatBytes(metrics.system.memory_total)}
-          </div>
-          <div className="meter">
-            <div 
-              className="meter-fill" 
-              style={{ width: `${(metrics.system.memory_usage / metrics.system.memory_total) * 100}%` }}
-            />
-          </div>
-        </div>
-        
-        <div className="metric-card">
-          <h3>Disk Usage</h3>
-          <div className="metric-value">
-            {formatBytes(metrics.system.disk_usage)} / {formatBytes(metrics.system.disk_total)}
-          </div>
-          <div className="meter">
-            <div 
-              className="meter-fill" 
-              style={{ width: `${(metrics.system.disk_usage / metrics.system.disk_total) * 100}%` }}
-            />
-          </div>
-        </div>
-        
-        <div className="metric-card">
-          <h3>Network Traffic</h3>
-          <div className="metric-value">
-            ↓ {formatBytes(metrics.system.network_rx)}/s &nbsp; ↑ {formatBytes(metrics.system.network_tx)}/s
-          </div>
-        </div>
-        
-        <div className="metric-card">
-          <h3>API Latency</h3>
-          <div className="metric-value">
-            {metrics.timers['api.latency'] ? formatTime(metrics.timers['api.latency'].avg_ms) : 'N/A'}
-          </div>
-          <ResponsiveContainer width="100%" height={100}>
-            <LineChart data={metrics.api_latency_history}>
-              <Line type="monotone" dataKey="value" stroke="#82ca9d" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="metric-card">
-          <h3>Messages</h3>
-          <div className="metric-value">
-            {metrics.counters['message.sent'] || 0} sent / {metrics.counters['message.received'] || 0} received
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const chartColors = getChartColors();
 
-  // Render CPU tab
-  const renderCpuTab = () => {
-    if (!metrics) return null;
-    
+  // Render loading state
+  if (loading) {
     return (
-      <div className="detailed-metrics">
-        <div className="metric-detail-card">
-          <h3>CPU Usage Over Time</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={metrics.cpu_history}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="timestamp" 
-                tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
-              />
-              <YAxis domain={[0, 100]} />
-              <Tooltip
-                formatter={(value: number) => `${value.toFixed(1)}%`}
-                labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
-              />
-              <Legend />
-              <Line name="CPU Usage %" type="monotone" dataKey="value" stroke="#8884d8" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="metric-detail-card">
-          <h3>Process CPU Usage</h3>
-          <div className="stats-grid">
-            {Object.entries(metrics.gauges)
-              .filter(([key]) => key.includes('cpu'))
-              .map(([key, value]) => (
-                <div key={key} className="stat-item">
-                  <div className="stat-label">{key.replace('system.', '')}</div>
-                  <div className="stat-value">{value.toFixed(1)}%</div>
-                </div>
-              ))}
-          </div>
+      <div className="p-4">
+        <h2 className="text-2xl font-bold mb-4">System Resources</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, index) => (
+            <Card key={index}>
+              <CardHeader>
+                <Skeleton className="h-8 w-3/4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-24 w-full" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );
-  };
+  }
 
-  // Render Memory tab
-  const renderMemoryTab = () => {
-    if (!metrics) return null;
-    
-    // Calculate memory usage breakdown
-    const usageBreakdown = [
-      { name: 'Application', value: metrics.gauges['memory.app'] || 0 },
-      { name: 'System', value: metrics.gauges['memory.system'] || 0 },
-      { name: 'Other', value: metrics.system.memory_usage - (metrics.gauges['memory.app'] || 0) - (metrics.gauges['memory.system'] || 0) }
-    ].filter(item => item.value > 0);
-    
+  // Render error state
+  if (error) {
     return (
-      <div className="detailed-metrics">
-        <div className="metric-detail-card">
-          <h3>Memory Usage Over Time</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={metrics.memory_history}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="timestamp" 
-                tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()}
-              />
-              <YAxis 
-                domain={[0, metrics.system.memory_total]} 
-                tickFormatter={(value) => formatBytes(value)}
-              />
-              <Tooltip
-                formatter={(value: number) => formatBytes(value)}
-                labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
-              />
-              <Legend />
-              <Line name="Memory Usage" type="monotone" dataKey="value" stroke="#82ca9d" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="metric-detail-card">
-          <h3>Memory Usage Breakdown</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={usageBreakdown}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis tickFormatter={(value) => formatBytes(value)} />
-              <Tooltip formatter={(value: number) => formatBytes(value)} />
-              <Legend />
-              <Bar name="Memory Usage" dataKey="value" fill="#8884d8" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="p-4">
+        <Alert variant="destructive">
+          <AlertTriangleIcon className="h-4 w-4" />
+          <AlertDescription>
+            {error}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-2" 
+              onClick={fetchMetrics}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
       </div>
     );
-  };
-
-  // Render Network tab
-  const renderNetworkTab = () => {
-    if (!metrics) return null;
-    
-    return (
-      <div className="detailed-metrics">
-        <div className="metric-detail-card">
-          <h3>Network Throughput</h3>
-          <div className="stats-grid">
-            <div className="stat-item">
-              <div className="stat-label">Download Rate</div>
-              <div className="stat-value">{formatBytes(metrics.system.network_rx)}/s</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Upload Rate</div>
-              <div className="stat-value">{formatBytes(metrics.system.network_tx)}/s</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Total Downloaded</div>
-              <div className="stat-value">{formatBytes(metrics.counters['network.rx.total'] || 0)}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Total Uploaded</div>
-              <div className="stat-value">{formatBytes(metrics.counters['network.tx.total'] || 0)}</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="metric-detail-card">
-          <h3>API Requests</h3>
-          <div className="stats-grid">
-            <div className="stat-item">
-              <div className="stat-label">Total Requests</div>
-              <div className="stat-value">{metrics.counters['api.requests.total'] || 0}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Successful Requests</div>
-              <div className="stat-value">{metrics.counters['api.requests.success'] || 0}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Failed Requests</div>
-              <div className="stat-value">{metrics.counters['api.requests.failure'] || 0}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Error Rate</div>
-              <div className="stat-value">
-                {metrics.counters['api.requests.total'] 
-                  ? ((metrics.counters['api.requests.failure'] || 0) / metrics.counters['api.requests.total'] * 100).toFixed(2)
-                  : 0}%
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Render API tab
-  const renderApiTab = () => {
-    if (!metrics) return null;
-    
-    return (
-      <div className="detailed-metrics">
-        <div className="metric-detail-card">
-          <h3>API Latency Over Time</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={metrics.api_latency_history}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="timestamp" 
-                tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()}
-              />
-              <YAxis tickFormatter={(value) => formatTime(value)} />
-              <Tooltip
-                formatter={(value: number) => formatTime(value)}
-                labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
-              />
-              <Legend />
-              <Line name="API Latency" type="monotone" dataKey="value" stroke="#8884d8" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="metric-detail-card">
-          <h3>API Endpoints</h3>
-          <table className="metrics-table">
-            <thead>
-              <tr>
-                <th>Endpoint</th>
-                <th>Requests</th>
-                <th>Avg. Latency</th>
-                <th>Success Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(metrics.timers)
-                .filter(([key]) => key.startsWith('api.endpoint.'))
-                .map(([key, value]) => {
-                  const endpoint = key.replace('api.endpoint.', '');
-                  const requests = metrics.counters[`api.endpoint.${endpoint}.count`] || 0;
-                  const successes = metrics.counters[`api.endpoint.${endpoint}.success`] || 0;
-                  const successRate = requests > 0 ? (successes / requests * 100).toFixed(1) : '100.0';
-                  
-                  return (
-                    <tr key={key}>
-                      <td>{endpoint}</td>
-                      <td>{requests}</td>
-                      <td>{formatTime(value.avg_ms)}</td>
-                      <td className={Number(successRate) < 99 ? 'stat-warning' : ''}>{successRate}%</td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  // Render Telemetry tab
-  const renderTelemetryTab = () => {
-    if (!metrics) return null;
-    
-    return (
-      <div className="detailed-metrics">
-        <div className="metric-detail-card">
-          <h3>Telemetry Overview</h3>
-          <div className="stats-grid">
-            <div className="stat-item">
-              <div className="stat-label">Events Collected</div>
-              <div className="stat-value">{metrics.telemetry.events_collected}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Events Sent</div>
-              <div className="stat-value">{metrics.telemetry.events_sent}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Metrics Collected</div>
-              <div className="stat-value">{metrics.telemetry.metrics_collected}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Metrics Sent</div>
-              <div className="stat-value">{metrics.telemetry.metrics_sent}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Logs Collected</div>
-              <div className="stat-value">{metrics.telemetry.logs_collected}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Logs Sent</div>
-              <div className="stat-value">{metrics.telemetry.logs_sent}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Batches Sent</div>
-              <div className="stat-value">{metrics.telemetry.batches_sent}</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-label">Batches Failed</div>
-              <div className="stat-value">{metrics.telemetry.batches_failed}</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="metric-detail-card">
-          <h3>Telemetry Status</h3>
-          <div className="stats-detail">
-            <div className="stat-row">
-              <div className="stat-label">Last Batch Sent</div>
-              <div className="stat-value">
-                {metrics.telemetry.last_batch_sent 
-                  ? new Date(metrics.telemetry.last_batch_sent).toLocaleString()
-                  : 'Never'}
-              </div>
-            </div>
-            <div className="stat-row">
-              <div className="stat-label">Sending Rate</div>
-              <div className="stat-value">
-                {metrics.counters['telemetry.sending_rate'] 
-                  ? `${metrics.counters['telemetry.sending_rate'].toFixed(2)} batches/minute`
-                  : 'N/A'}
-              </div>
-            </div>
-            <div className="stat-row">
-              <div className="stat-label">Success Rate</div>
-              <div className="stat-value">
-                {metrics.telemetry.batches_sent + metrics.telemetry.batches_failed > 0
-                  ? `${(metrics.telemetry.batches_sent / (metrics.telemetry.batches_sent + metrics.telemetry.batches_failed) * 100).toFixed(1)}%`
-                  : 'N/A'}
-              </div>
-            </div>
-            <div className="stat-row">
-              <div className="stat-label">Connection Status</div>
-              <div className="stat-value">
-                <span className={metrics.gauges['telemetry.connected'] > 0 ? 'status-indicator connected' : 'status-indicator disconnected'}></span>
-                {metrics.gauges['telemetry.connected'] > 0 ? 'Connected' : 'Disconnected'}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  }
 
   return (
-    <div className="resource-dashboard">
-      <div className="dashboard-header">
-        <h2>System Resources & Performance</h2>
-        <div className="dashboard-controls">
-          <label className="refresh-control">
-            <input 
-              type="checkbox" 
-              checked={autoRefresh} 
-              onChange={(e) => setAutoRefresh(e.target.checked)} 
-            />
-            Auto-refresh
-          </label>
-          {autoRefresh && (
-            <select 
-              value={refreshInterval} 
-              onChange={(e) => setRefreshInterval(Number(e.target.value))}
-              className="interval-select"
-            >
-              <option value={1000}>Every 1s</option>
-              <option value={5000}>Every 5s</option>
-              <option value={10000}>Every 10s</option>
-              <option value={30000}>Every 30s</option>
-              <option value={60000}>Every minute</option>
-            </select>
-          )}
-          <button 
-            onClick={fetchMetrics} 
-            className="refresh-button"
-            disabled={loading}
+    <div className="p-4">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">System Resources {renderPlatformOptimized()}</h2>
+        <div className="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setAutoRefresh(!autoRefresh)}
           >
-            {loading ? 'Refreshing...' : 'Refresh Now'}
-          </button>
+            {autoRefresh ? 'Auto-refreshing' : 'Auto-refresh paused'}
+            <ClockIcon className="ml-2 h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={fetchMetrics}
+          >
+            Refresh
+            <RefreshCwIcon className="ml-2 h-4 w-4" />
+          </Button>
         </div>
       </div>
-      
-      <div className="dashboard-tabs">
-        <button 
-          className={activeTab === 'overview' ? 'active' : ''} 
-          onClick={() => setActiveTab('overview')}
-        >
-          Overview
-        </button>
-        <button 
-          className={activeTab === 'cpu' ? 'active' : ''} 
-          onClick={() => setActiveTab('cpu')}
-        >
-          CPU
-        </button>
-        <button 
-          className={activeTab === 'memory' ? 'active' : ''} 
-          onClick={() => setActiveTab('memory')}
-        >
-          Memory
-        </button>
-        <button 
-          className={activeTab === 'network' ? 'active' : ''} 
-          onClick={() => setActiveTab('network')}
-        >
-          Network
-        </button>
-        <button 
-          className={activeTab === 'api' ? 'active' : ''} 
-          onClick={() => setActiveTab('api')}
-        >
-          API
-        </button>
-        <button 
-          className={activeTab === 'telemetry' ? 'active' : ''} 
-          onClick={() => setActiveTab('telemetry')}
-        >
-          Telemetry
-        </button>
-      </div>
-      
-      <div className="dashboard-content">
-        {error && (
-          <div className="error-message">
-            {error}
+
+      <Tabs 
+        defaultValue="overview" 
+        value={activeTab} 
+        onValueChange={setActiveTab}
+        className="space-y-4"
+      >
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="cpu">CPU</TabsTrigger>
+          <TabsTrigger value="memory">Memory</TabsTrigger>
+          <TabsTrigger value="disk">Storage</TabsTrigger>
+          <TabsTrigger value="network">Network</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* CPU Overview */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="flex items-center">
+                  <CpuIcon className="h-4 w-4 mr-2" />
+                  <h3 className="font-medium">CPU Usage</h3>
+                </div>
+                <span className={`text-sm ${metrics.cpu.usage > 80 ? 'text-red-500' : ''}`}>
+                  {metrics.cpu.usage.toFixed(1)}%
+                </span>
+              </CardHeader>
+              <CardContent>
+                <Progress value={metrics.cpu.usage} className="h-2" />
+                <div className="mt-4 h-24">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={metrics.cpu.history}>
+                      <Line 
+                        type="monotone" 
+                        dataKey="value" 
+                        stroke={chartColors.cpu} 
+                        strokeWidth={2} 
+                        dot={false} 
+                      />
+                      <XAxis dataKey="timestamp" hide />
+                      <YAxis hide domain={[0, 100]} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <div className="text-xs text-muted-foreground">
+                  Temperature: {metrics.cpu.temperature}°C
+                </div>
+              </CardFooter>
+            </Card>
+
+            {/* Memory Overview */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="flex items-center">
+                  <MemoryIcon className="h-4 w-4 mr-2" />
+                  <h3 className="font-medium">Memory Usage</h3>
+                </div>
+                <span className="text-sm">
+                  {formatBytes(metrics.memory.used)} / {formatBytes(metrics.memory.total)}
+                </span>
+              </CardHeader>
+              <CardContent>
+                <Progress 
+                  value={(metrics.memory.used / metrics.memory.total) * 100} 
+                  className="h-2" 
+                />
+                <div className="mt-4 h-24">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={metrics.memory.history}>
+                      <Line 
+                        type="monotone" 
+                        dataKey="value" 
+                        stroke={chartColors.memory} 
+                        strokeWidth={2} 
+                        dot={false} 
+                      />
+                      <XAxis dataKey="timestamp" hide />
+                      <YAxis hide domain={[0, 100]} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <div className="text-xs text-muted-foreground">
+                  Available: {formatBytes(metrics.memory.available)}
+                </div>
+              </CardFooter>
+            </Card>
+
+            {/* Disk Overview */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="flex items-center">
+                  <HardDriveIcon className="h-4 w-4 mr-2" />
+                  <h3 className="font-medium">Disk Usage</h3>
+                </div>
+                <span className="text-sm">
+                  {formatBytes(metrics.disk.used)} / {formatBytes(metrics.disk.total)}
+                </span>
+              </CardHeader>
+              <CardContent>
+                <Progress 
+                  value={(metrics.disk.used / metrics.disk.total) * 100} 
+                  className="h-2" 
+                />
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Read</div>
+                    <div>{formatBytes(metrics.disk.readRate)}/s</div>
+                  </div>
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Write</div>
+                    <div>{formatBytes(metrics.disk.writeRate)}/s</div>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <div className="text-xs text-muted-foreground">
+                  Available: {formatBytes(metrics.disk.available)}
+                </div>
+              </CardFooter>
+            </Card>
+
+            {/* Network Overview */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="flex items-center">
+                  <NetworkIcon className="h-4 w-4 mr-2" />
+                  <h3 className="font-medium">Network</h3>
+                </div>
+                <div>
+                  {metrics.network.status === 'online' && (
+                    <Badge variant="outline" className="bg-green-500/10 text-green-500">
+                      Online
+                    </Badge>
+                  )}
+                  {metrics.network.status === 'limited' && (
+                    <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500">
+                      Limited
+                    </Badge>
+                  )}
+                  {metrics.network.status === 'offline' && (
+                    <Badge variant="outline" className="bg-red-500/10 text-red-500">
+                      Offline
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Download</div>
+                    <div>{formatBytes(metrics.network.downloadRate)}/s</div>
+                  </div>
+                  <div className="text-xs">
+                    <div className="text-muted-foreground">Upload</div>
+                    <div>{formatBytes(metrics.network.uploadRate)}/s</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs">
+                  <div className="text-muted-foreground">Latency</div>
+                  <div>{metrics.network.latency.toFixed(1)} ms</div>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <div className="text-xs">
+                  <Button variant="ghost" size="sm" className="h-6 px-2">
+                    <GlobeIcon className="h-3 w-3 mr-1" />
+                    Details
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
           </div>
-        )}
-        
-        {loading && !metrics ? (
-          <div className="loading-indicator">
-            <div className="spinner"></div>
-            <p>Loading metrics data...</p>
-          </div>
-        ) : (
-          <>
-            {activeTab === 'overview' && renderOverview()}
-            {activeTab === 'cpu' && renderCpuTab()}
-            {activeTab === 'memory' && renderMemoryTab()}
-            {activeTab === 'network' && renderNetworkTab()}
-            {activeTab === 'api' && renderApiTab()}
-            {activeTab === 'telemetry' && renderTelemetryTab()}
-          </>
-        )}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="cpu" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium">CPU Performance</h3>
+                <div className="text-sm text-muted-foreground">
+                  Current Usage: {metrics.cpu.usage.toFixed(1)}%
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={metrics.cpu.history}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="timestamp" 
+                      tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
+                    />
+                    <YAxis domain={[0, 100]} />
+                    <Tooltip 
+                      formatter={(value) => [`${value}%`, 'Usage']}
+                      labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()} 
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="value" 
+                      name="CPU Usage" 
+                      stroke={chartColors.cpu} 
+                      strokeWidth={2} 
+                      dot={false} 
+                      activeDot={{ r: 6 }} 
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <div className="grid grid-cols-3 gap-4 w-full">
+                <div>
+                  <div className="text-sm font-medium">Temperature</div>
+                  <div className="text-2xl">{metrics.cpu.temperature}°C</div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Peak Usage</div>
+                  <div className="text-2xl">
+                    {Math.max(...metrics.cpu.history.map(point => point.value), 0).toFixed(1)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Average</div>
+                  <div className="text-2xl">
+                    {(metrics.cpu.history.reduce((sum, point) => sum + point.value, 0) / 
+                      (metrics.cpu.history.length || 1)).toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="memory" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium">Memory Usage</h3>
+                <div className="text-sm text-muted-foreground">
+                  {formatBytes(metrics.memory.used)} / {formatBytes(metrics.memory.total)}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={metrics.memory.history}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="timestamp" 
+                      tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
+                    />
+                    <YAxis domain={[0, 100]} />
+                    <Tooltip 
+                      formatter={(value) => [`${value}%`, 'Usage']}
+                      labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()} 
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="value" 
+                      name="Memory Usage" 
+                      stroke={chartColors.memory} 
+                      strokeWidth={2} 
+                      dot={false} 
+                      activeDot={{ r: 6 }} 
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <Separator className="my-4" />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <div className="text-sm font-medium">Total Memory</div>
+                  <div className="text-2xl">{formatBytes(metrics.memory.total)}</div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Used Memory</div>
+                  <div className="text-2xl">{formatBytes(metrics.memory.used)}</div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Available Memory</div>
+                  <div className="text-2xl">{formatBytes(metrics.memory.available)}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="disk" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium">Storage Performance</h3>
+                <div className="text-sm text-muted-foreground">
+                  {formatBytes(metrics.disk.used)} / {formatBytes(metrics.disk.total)}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Progress 
+                value={(metrics.disk.used / metrics.disk.total) * 100} 
+                className="h-4 mb-4" 
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Read Rate</h4>
+                  <div className="h-40">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={metrics.disk.history}>
+                        <XAxis 
+                          dataKey="timestamp" 
+                          tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
+                        />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatBytes(value), 'Read Rate']}
+                          labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()} 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="readRate" 
+                          name="Read Rate" 
+                          stroke={chartColors.disk} 
+                          strokeWidth={2} 
+                          dot={false} 
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="text-center mt-2">
+                    Current: {formatBytes(metrics.disk.readRate)}/s
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Write Rate</h4>
+                  <div className="h-40">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={metrics.disk.history}>
+                        <XAxis 
+                          dataKey="timestamp" 
+                          tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
+                        />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatBytes(value), 'Write Rate']}
+                          labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()} 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="writeRate" 
+                          name="Write Rate" 
+                          stroke="#ff9500" 
+                          strokeWidth={2} 
+                          dot={false} 
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="text-center mt-2">
+                    Current: {formatBytes(metrics.disk.writeRate)}/s
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <div className="grid grid-cols-3 gap-4 w-full">
+                <div>
+                  <div className="text-sm font-medium">Total Space</div>
+                  <div className="text-xl">{formatBytes(metrics.disk.total)}</div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Used Space</div>
+                  <div className="text-xl">{formatBytes(metrics.disk.used)}</div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Available</div>
+                  <div className="text-xl">{formatBytes(metrics.disk.available)}</div>
+                </div>
+              </div>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="network" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium">Network Status</h3>
+                <div>
+                  {metrics.network.status === 'online' && (
+                    <Badge className="bg-green-500 text-white">
+                      Online
+                    </Badge>
+                  )}
+                  {metrics.network.status === 'limited' && (
+                    <Badge className="bg-yellow-500 text-white">
+                      Limited Connectivity
+                    </Badge>
+                  )}
+                  {metrics.network.status === 'offline' && (
+                    <Badge className="bg-red-500 text-white">
+                      Offline
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Download Rate</h4>
+                  <div className="h-40">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={metrics.network.history}>
+                        <XAxis 
+                          dataKey="timestamp" 
+                          tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
+                        />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatBytes(value), 'Download']}
+                          labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()} 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="downloadRate" 
+                          name="Download" 
+                          stroke={chartColors.network} 
+                          strokeWidth={2} 
+                          dot={false} 
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="text-center mt-2">
+                    Current: {formatBytes(metrics.network.downloadRate)}/s
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Upload Rate</h4>
+                  <div className="h-40">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={metrics.network.history}>
+                        <XAxis 
+                          dataKey="timestamp" 
+                          tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
+                        />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatBytes(value), 'Upload']}
+                          labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()} 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="uploadRate" 
+                          name="Upload" 
+                          stroke="#ff3b30" 
+                          strokeWidth={2} 
+                          dot={false} 
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="text-center mt-2">
+                    Current: {formatBytes(metrics.network.uploadRate)}/s
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="my-4" />
+              
+              <div>
+                <h4 className="text-sm font-medium mb-2">Latency</h4>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={metrics.network.history}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="timestamp" 
+                        tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()} 
+                      />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value) => [`${value} ms`, 'Latency']}
+                        labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()} 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="latency" 
+                        name="Latency" 
+                        stroke="#8884d8" 
+                        strokeWidth={2} 
+                        dot={false} 
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="text-center mt-2">
+                  Current: {metrics.network.latency.toFixed(1)} ms
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

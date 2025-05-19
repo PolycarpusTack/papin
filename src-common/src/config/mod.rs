@@ -1,12 +1,20 @@
 mod settings;
 mod storage;
+mod platform;
 
 use once_cell::sync::OnceCell;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use crate::platform::fs::platform_fs;
+
 pub use settings::Settings;
 pub use storage::StorageManager;
+pub use platform::{
+    ConfigManager, ConfigManagerBuilder, ConfigVersion, ConfigError,
+    get_config_manager, clear_config_managers, 
+    migrate_to_v1_1_0, migrate_to_v2_0_0,
+};
 
 /// Global settings instance
 static SETTINGS: OnceCell<Arc<Mutex<Settings>>> = OnceCell::new();
@@ -28,34 +36,45 @@ pub fn get_storage_manager() -> Arc<StorageManager> {
     }).clone()
 }
 
-/// Get the application config directory
+/// Get the application config directory using platform-agnostic file operations
 pub fn get_config_dir() -> PathBuf {
-    let proj_dirs = directories::ProjectDirs::from("com", "anthropic", "mcp-client")
-        .expect("Failed to determine config directory");
-    
-    let config_dir = proj_dirs.config_dir().to_path_buf();
-    
-    // Create if it doesn't exist
-    if !config_dir.exists() {
-        std::fs::create_dir_all(&config_dir).expect("Failed to create config directory");
-    }
-    
-    config_dir
+    let fs = platform_fs();
+    fs.app_data_dir("Papin")
+        .unwrap_or_else(|_| {
+            // Fallback to old method
+            let proj_dirs = directories::ProjectDirs::from("com", "anthropic", "mcp-client")
+                .expect("Failed to determine config directory");
+            
+            let config_dir = proj_dirs.config_dir().to_path_buf();
+            
+            // Create if it doesn't exist
+            if !config_dir.exists() {
+                std::fs::create_dir_all(&config_dir).expect("Failed to create config directory");
+            }
+            
+            config_dir
+        })
 }
 
-/// Get the application data directory
+/// Get the application data directory using platform-agnostic file operations
 pub fn get_data_dir() -> PathBuf {
-    let proj_dirs = directories::ProjectDirs::from("com", "anthropic", "mcp-client")
-        .expect("Failed to determine data directory");
-    
-    let data_dir = proj_dirs.data_dir().to_path_buf();
-    
-    // Create if it doesn't exist
-    if !data_dir.exists() {
-        std::fs::create_dir_all(&data_dir).expect("Failed to create data directory");
-    }
-    
-    data_dir
+    let fs = platform_fs();
+    fs.app_data_dir("Papin")
+        .map(|dir| dir.join("data"))
+        .unwrap_or_else(|_| {
+            // Fallback to old method
+            let proj_dirs = directories::ProjectDirs::from("com", "anthropic", "mcp-client")
+                .expect("Failed to determine data directory");
+            
+            let data_dir = proj_dirs.data_dir().to_path_buf();
+            
+            // Create if it doesn't exist
+            if !data_dir.exists() {
+                std::fs::create_dir_all(&data_dir).expect("Failed to create data directory");
+            }
+            
+            data_dir
+        })
 }
 
 /// Get a path within the config directory

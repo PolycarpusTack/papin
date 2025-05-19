@@ -1,0 +1,251 @@
+/* 
+  Global CSS styles for Papin application 
+  Netflix-inspired dark theme
+*/
+
+/* Load fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* CSS Variables for theming */
+:root {
+  /* Colors */
+  --color-primary: #e50914;
+  --color-primary-light: #f40612;
+  --color-primary-dark: #b20710;
+  
+  --color-secondary: #0071eb;
+  --color-secondary-light: #2196f3;
+  --color-secondary-dark: #0a67d1;
+  
+  /* Background colors */
+  --background-primary: #141414;
+  --background-secondary: #181818;
+  --background-tertiary: #232323;
+  
+  --color-bg: #141414;
+  --color-bg-secondary: #181818;
+  --color-bg-tertiary: #232323;
+  
+  /* Text colors */
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-disabled: #757575;
+  
+  --color-text: #ffffff;
+  --color-text-secondary: #b3b3b3;
+  --color-text-disabled: #757575;
+  
+  /* UI elements */
+  --divider-color: rgba(255, 255, 255, 0.1);
+  --card-hover-color: #232323;
+  --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  
+  --color-divider: rgba(255, 255, 255, 0.1);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.2);
+  
+  /* Status colors */
+  --success-color: #00C853;
+  --warning-color: #FFA000;
+  --error-color: #E50914;
+  --info-color: #0071EB;
+  
+  --color-success: #00C853;
+  --color-success-light: rgba(0, 200, 83, 0.1);
+  --color-warning: #FFA000;
+  --color-warning-light: rgba(255, 160, 0, 0.1);
+  --color-error: #E50914;
+  --color-error-light: rgba(229, 9, 20, 0.1);
+  --color-info: #0071EB;
+  --color-info-light: rgba(0, 113, 235, 0.1);
+  --color-error-rgb: 229, 9, 20;
+  --color-success-rgb: 0, 200, 83;
+  
+  /* Surface colors */
+  --color-surface: #181818;
+  --color-surface-variant: rgba(255, 255, 255, 0.1);
+  --color-surface-hover: rgba(255, 255, 255, 0.15);
+  --color-on-surface: #ffffff;
+  --color-on-surface-variant: #b3b3b3;
+  --color-on-primary: #ffffff;
+  --color-on-error: #ffffff;
+  --color-on-warning: #ffffff;
+  
+  /* Focus */
+  --color-focus: rgba(0, 113, 235, 0.5);
+  
+  /* Typography */
+  --font-family: 'Netflix Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 600;
+  
+  /* Spacing */
+  --spacing-xxs: 0.125rem;
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-xxl: 2.5rem;
+  
+  /* Border radius */
+  --border-radius-sm: 0.125rem;
+  --border-radius-md: 0.25rem;
+  --border-radius-lg: 0.5rem;
+  --border-radius-xl: 0.75rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
+  
+  /* Transitions */
+  --transition-fast: 150ms;
+  --transition-normal: 300ms;
+  --transition-slow: 500ms;
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: var(--font-family);
+  background-color: var(--background-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  margin-bottom: var(--spacing-md);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+p {
+  margin-bottom: var(--spacing-md);
+}
+
+a {
+  color: var(--color-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--color-secondary-light);
+}
+
+button {
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Utility classes */
+.horizontal-scroll {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 0 4%;
+  margin: 0 -4%;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.horizontal-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Netflix-inspired animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+/* Animation utility classes */
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+.pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.shimmer {
+  background: linear-gradient(to right, #1f1f1f 8%, #2b2b2b 18%, #1f1f1f 33%);
+  background-size: 1000px 100%;
+  animation: shimmer 1.5s infinite linear;
+}

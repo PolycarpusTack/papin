@@ -46,6 +46,8 @@ flate2 = "1.0"
 lru = "0.12"
 tempfile = "3.8"
 dirs = "5.0"
+num_cpus = "1.15"
+native-dialog = "0.6"
 
 # Memory optimization (optional)
 mimalloc = { version = "0.1", optional = true }
@@ -89,10 +91,10 @@ opt-level = 2
 [profile.release.package."*"]
 opt-level = 3
 
-[[bench]]
-name = "performance_bench"
-harness = false
-required-features = ["benchmarking"]
+# [[bench]]
+# name = "performance_bench"
+# harness = false
+# required-features = ["benchmarking"]
 
 [package.metadata.bundle]
 name = "Papin"
