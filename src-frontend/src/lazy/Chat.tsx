@@ -1,145 +1,99 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
-import { Button } from '../components/ui/Button';
+import React, { useState, useEffect } from 'react';
+import ConversationPanel from '../components/chat/ConversationPanel';
+import ConversationList from '../components/chat/ConversationList';
 import './Chat.css';
+import { invoke } from '@tauri-apps/api/tauri';
+import ChatApi, { Conversation } from '../api/ChatApi';
 
-// Define message types
-interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: number;
-}
-
-// Chat component - lazy loaded after shell is ready
+// Chat component - main chat interface with conversations list and active conversation
 const Chat: React.FC = () => {
   const [loaded, setLoaded] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  // Generate a unique ID for messages
-  const generateId = () => {
-    return `msg_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-  };
-  
-  // Scroll to the latest message
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-  
-  // Auto-resize the textarea based on content
-  const autoResizeTextarea = () => {
-    if (inputRef.current) {
-      // Reset height to auto to correctly calculate the new height
-      inputRef.current.style.height = 'auto';
-      // Set the new height based on the scroll height
-      const newHeight = Math.min(
-        Math.max(56, inputRef.current.scrollHeight), // Min height 56px
-        200 // Max height 200px
-      );
-      inputRef.current.style.height = `${newHeight}px`;
-    }
-  };
-  
-  // Load initial chat data
+  // Load conversations on component mount
   useEffect(() => {
-    const loadChat = async () => {
+    const loadConversations = async () => {
       try {
-        // In a real app, we would fetch messages from backend
-        // const initialMessages = await invoke<Message[]>('get_chat_messages');
+        setLoading(true);
+        const conversationsData = await ChatApi.getConversations();
+        setConversations(conversationsData);
         
-        // For now, just add a system welcome message
-        const welcomeMessage: Message = {
-          id: generateId(),
-          role: 'system',
-          content: 'Welcome to Claude MCP client. How can I help you today?',
-          timestamp: Date.now(),
-        };
+        // Set the most recent conversation as active if available
+        if (conversationsData.length > 0) {
+          const sortedConversations = [...conversationsData].sort(
+            (a, b) => b.updated_at - a.updated_at
+          );
+          setActiveConversationId(sortedConversations[0].id);
+        }
         
-        setMessages([welcomeMessage]);
         setLoaded(true);
-      } catch (error) {
-        console.error('Failed to load chat:', error);
+      } catch (err) {
+        console.error('Failed to load conversations:', err);
+        setError('Failed to load conversations');
+      } finally {
+        setLoading(false);
       }
     };
     
-    loadChat();
+    loadConversations();
   }, []);
   
-  // Auto-resize textarea and scroll to bottom when messages change
-  useEffect(() => {
-    autoResizeTextarea();
-    scrollToBottom();
-  }, [messages, inputValue]);
+  // Toggle sidebar visibility
+  const toggleSidebar = () => {
+    setSidebarVisible(!sidebarVisible);
+  };
   
-  // Focus the textarea when the component loads
-  useEffect(() => {
-    if (loaded && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [loaded]);
-  
-  // Handle sending a message
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
-    
-    const userMessage: Message = {
-      id: generateId(),
-      role: 'user',
-      content: inputValue,
-      timestamp: Date.now(),
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    setInputValue('');
-    setLoading(true);
-    
+  // Create a new conversation
+  const createNewConversation = async () => {
     try {
-      // In a real app, we would send the message to the backend
-      // const response = await invoke<Message>('send_message', { content: inputValue });
+      const defaultModel = "claude-3-opus-20240229"; // This would come from user settings
+      const newConversation = await ChatApi.createConversation("New Conversation", defaultModel);
       
-      // For now, just simulate a response after a delay
-      setTimeout(() => {
-        const assistantMessage: Message = {
-          id: generateId(),
-          role: 'assistant',
-          content: `I received your message: "${inputValue}". This is a placeholder response as the MCP backend is not yet connected.`,
-          timestamp: Date.now(),
-        };
-        
-        setMessages(prev => [...prev, assistantMessage]);
-        setLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      setLoading(false);
+      // Add to conversations list
+      setConversations(prev => [newConversation, ...prev]);
       
-      // Add an error message
-      const errorMessage: Message = {
-        id: generateId(),
-        role: 'system',
-        content: 'Failed to send message. Please try again.',
-        timestamp: Date.now(),
-      };
-      
-      setMessages(prev => [...prev, errorMessage]);
+      // Set as active conversation
+      setActiveConversationId(newConversation.id);
+    } catch (err) {
+      console.error('Failed to create conversation:', err);
+      setError('Failed to create new conversation');
     }
   };
   
-  // Handle textarea input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputValue(e.target.value);
+  // Handle selecting a conversation
+  const handleConversationSelect = (conversationId: string) => {
+    setActiveConversationId(conversationId);
+    
+    // On mobile, hide sidebar after selection
+    if (window.innerWidth < 768) {
+      setSidebarVisible(false);
+    }
   };
   
-  // Handle keyboard shortcuts
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Send message on Enter without Shift
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
+  // Delete a conversation
+  const handleDeleteConversation = async (conversationId: string) => {
+    try {
+      await ChatApi.deleteConversation(conversationId);
+      
+      // Remove from list
+      setConversations(prev => prev.filter(c => c.id !== conversationId));
+      
+      // If active conversation was deleted, select another one
+      if (activeConversationId === conversationId) {
+        const remaining = conversations.filter(c => c.id !== conversationId);
+        if (remaining.length > 0) {
+          setActiveConversationId(remaining[0].id);
+        } else {
+          setActiveConversationId(undefined);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+      setError('Failed to delete conversation');
     }
   };
   
@@ -148,75 +102,65 @@ const Chat: React.FC = () => {
       <div className="chat-container">
         <div className="chat-loading">
           <div className="loading-spinner"></div>
-          <p>Loading conversation...</p>
+          <p>Loading conversations...</p>
         </div>
       </div>
     );
   }
   
   return (
-    <div className="chat-container fade-in">
-      <div className="chat-header">
-        <h2>Claude MCP</h2>
-        <div className="chat-status online">Connected</div>
-      </div>
+    <div className="chat-container">
+      {error && (
+        <div className="chat-error">
+          <p>{error}</p>
+          <button onClick={() => setError(null)}>Dismiss</button>
+        </div>
+      )}
       
-      <div className="chat-messages">
-        {messages.map((message) => (
-          <div 
-            key={message.id} 
-            className={`message ${message.role}`}
+      <div className={`chat-layout ${sidebarVisible ? 'sidebar-visible' : 'sidebar-hidden'}`}>
+        <div className="chat-sidebar">
+          <div className="sidebar-header">
+            <h2>Conversations</h2>
+            <button 
+              className="new-conversation-button"
+              onClick={createNewConversation}
+              aria-label="New conversation"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 0a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2H9v6a1 1 0 1 1-2 0V9H1a1 1 0 0 1 0-2h6V1a1 1 0 0 1 1-1z"/>
+              </svg>
+              New
+            </button>
+          </div>
+          
+          <ConversationList 
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            onSelect={handleConversationSelect}
+            onDelete={handleDeleteConversation}
+          />
+        </div>
+        
+        <div className="main-content">
+          <button 
+            className="toggle-sidebar-button"
+            onClick={toggleSidebar}
+            aria-label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
           >
-            <div className="message-avatar">
-              {message.role === 'user' ? 'U' : message.role === 'assistant' ? 'C' : 'S'}
-            </div>
-            <div className="message-content-wrapper">
-              <div className="message-content">
-                {message.content}
-              </div>
-              <div className="message-time">
-                {new Date(message.timestamp).toLocaleTimeString(undefined, {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </div>
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="message assistant loading">
-            <div className="message-avatar">C</div>
-            <div className="message-content-wrapper">
-              <div className="message-content">
-                <div className="typing-indicator">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-      
-      <div className="chat-input-container">
-        <textarea 
-          ref={inputRef}
-          className="chat-input" 
-          placeholder="Type a message..."
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          rows={1}
-        />
-        <Button 
-          onClick={handleSendMessage}
-          disabled={!inputValue.trim() || loading}
-          className="send-button"
-        >
-          Send
-        </Button>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+              {sidebarVisible ? (
+                <path fillRule="evenodd" d="M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v9zm-5-8a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-3z"/>
+              ) : (
+                <path fillRule="evenodd" d="M2 12.5a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v9zm3-8.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-1zm3.5.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-7z"/>
+              )}
+            </svg>
+          </button>
+          
+          <ConversationPanel 
+            conversationId={activeConversationId}
+            onNewConversation={createNewConversation}
+          />
+        </div>
       </div>
     </div>
   );

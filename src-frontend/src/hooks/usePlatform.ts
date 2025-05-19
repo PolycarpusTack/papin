@@ -1,5 +1,34 @@
 import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+// Try to import Tauri API, but provide a fallback for dev mode
+let invoke: (cmd: string, args?: any) => Promise<any>;
+try {
+  const tauriApi = require('@tauri-apps/api/tauri');
+  invoke = tauriApi.invoke;
+} catch (e) {
+  // Mock for development mode without Tauri
+  console.log('Running in development mode without Tauri');
+  invoke = async (cmd: string, args?: any) => {
+    console.log(`Mock invoke: ${cmd}`, args);
+    if (cmd === 'get_hardware_capabilities') {
+      return {
+        cpu_cores: 4,
+        logical_cores: 8,
+        total_memory: 16000000000,
+        gpu_info: {
+          name: 'Mock GPU',
+          vendor: 'Mock Vendor',
+          memory: 4000000000,
+        },
+        platform: 'windows',
+        supports_metal: false,
+        supports_directml: true,
+        supports_opencl: true,
+        supports_cuda: false,
+      };
+    }
+    return null;
+  };
+}
 
 export type Platform = 'windows' | 'macos' | 'linux' | 'unknown';
 

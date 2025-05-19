@@ -22,15 +22,27 @@
   --background-secondary: #181818;
   --background-tertiary: #232323;
   
+  --color-bg: #141414;
+  --color-bg-secondary: #181818;
+  --color-bg-tertiary: #232323;
+  
   /* Text colors */
   --text-primary: #ffffff;
   --text-secondary: #b3b3b3;
   --text-disabled: #757575;
   
+  --color-text: #ffffff;
+  --color-text-secondary: #b3b3b3;
+  --color-text-disabled: #757575;
+  
   /* UI elements */
   --divider-color: rgba(255, 255, 255, 0.1);
   --card-hover-color: #232323;
   --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  
+  --color-divider: rgba(255, 255, 255, 0.1);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.2);
   
   /* Status colors */
   --success-color: #00C853;
@@ -38,21 +50,61 @@
   --error-color: #E50914;
   --info-color: #0071EB;
   
+  --color-success: #00C853;
+  --color-success-light: rgba(0, 200, 83, 0.1);
+  --color-warning: #FFA000;
+  --color-warning-light: rgba(255, 160, 0, 0.1);
+  --color-error: #E50914;
+  --color-error-light: rgba(229, 9, 20, 0.1);
+  --color-info: #0071EB;
+  --color-info-light: rgba(0, 113, 235, 0.1);
+  --color-error-rgb: 229, 9, 20;
+  --color-success-rgb: 0, 200, 83;
+  
+  /* Surface colors */
+  --color-surface: #181818;
+  --color-surface-variant: rgba(255, 255, 255, 0.1);
+  --color-surface-hover: rgba(255, 255, 255, 0.15);
+  --color-on-surface: #ffffff;
+  --color-on-surface-variant: #b3b3b3;
+  --color-on-primary: #ffffff;
+  --color-on-error: #ffffff;
+  --color-on-warning: #ffffff;
+  
+  /* Focus */
+  --color-focus: rgba(0, 113, 235, 0.5);
+  
   /* Typography */
   --font-family: 'Netflix Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 600;
   
   /* Spacing */
+  --spacing-xxs: 0.125rem;
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;
   --spacing-lg: 1.5rem;
   --spacing-xl: 2rem;
+  --spacing-xxl: 2.5rem;
   
   /* Border radius */
   --border-radius-sm: 0.125rem;
   --border-radius-md: 0.25rem;
   --border-radius-lg: 0.5rem;
   --border-radius-xl: 0.75rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
   
   /* Transitions */
   --transition-fast: 150ms;

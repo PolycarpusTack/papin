@@ -14,7 +14,7 @@ const rootElement = document.getElementById('root') as HTMLElement;
 // Create the root and render the app
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/">
       <App />
     </BrowserRouter>
   </React.StrictMode>

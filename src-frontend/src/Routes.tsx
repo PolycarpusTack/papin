@@ -49,17 +49,17 @@ const AppRoutes: React.FC = () => {
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/" element={<AppShell />}>
-          {/* Default redirect */}
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          {/* Default redirect - going straight to models in dev mode */}
+          <Route index element={<Navigate to="/models" replace />} />
           
           {/* Main routes */}
-          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="dashboard" element={<Navigate to="/models" replace />} />
           <Route path="models" element={<ModelManagement />} />
           <Route path="settings" element={<Settings />} />
           <Route path="settings/offline" element={<OfflineSettings />} />
           
           {/* Fallback for unknown routes */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/models" replace />} />
         </Route>
       </Routes>
     </Suspense>

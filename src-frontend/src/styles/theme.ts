@@ -449,4 +449,101 @@ export const globalStyles = `
   }
 `;
 
+// Theme mode type
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+// Platform theme interface
+export interface PlatformTheme {
+  platform: 'windows' | 'macos' | 'linux' | 'unknown';
+  mode: 'light' | 'dark';
+  base: typeof appTheme;
+  components: typeof componentVariants;
+}
+
+/**
+ * Get platform-specific theme
+ */
+export function getPlatformTheme(platform: string, mode: ThemeMode): PlatformTheme {
+  // Determine actual mode based on system settings if needed
+  const actualMode = mode === 'system' 
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : mode;
+  
+  // Create platform theme
+  return {
+    platform: platform as PlatformTheme['platform'],
+    mode: actualMode,
+    base: appTheme,
+    components: componentVariants
+  };
+}
+
+/**
+ * Apply theme to the document
+ */
+export function applyTheme(theme: PlatformTheme): void {
+  const root = document.documentElement;
+  const { mode, base } = theme;
+  
+  // Apply colors based on theme mode
+  const colors = mode === 'dark' ? base.colors.dark : base.colors.light;
+  
+  // Apply background colors
+  root.style.setProperty('--color-bg', colors.background.primary);
+  root.style.setProperty('--color-bg-secondary', colors.background.secondary);
+  root.style.setProperty('--color-bg-tertiary', colors.background.tertiary);
+  
+  // Apply text colors
+  root.style.setProperty('--color-text', colors.text.primary);
+  root.style.setProperty('--color-text-secondary', colors.text.secondary);
+  root.style.setProperty('--color-text-disabled', colors.text.disabled);
+  
+  // Apply primary colors
+  root.style.setProperty('--color-primary', base.colors.primary.main);
+  root.style.setProperty('--color-primary-light', base.colors.primary.light);
+  root.style.setProperty('--color-primary-dark', base.colors.primary.dark);
+  
+  // Apply secondary colors
+  root.style.setProperty('--color-secondary', base.colors.secondary.main);
+  root.style.setProperty('--color-secondary-light', base.colors.secondary.light);
+  root.style.setProperty('--color-secondary-dark', base.colors.secondary.dark);
+  
+  // Apply status colors
+  root.style.setProperty('--color-success', base.colors.status.success.main);
+  root.style.setProperty('--color-success-light', base.colors.status.success.light);
+  root.style.setProperty('--color-warning', base.colors.status.warning.main);
+  root.style.setProperty('--color-warning-light', base.colors.status.warning.light);
+  root.style.setProperty('--color-error', base.colors.status.error.main);
+  root.style.setProperty('--color-error-light', base.colors.status.error.light);
+  root.style.setProperty('--color-info', base.colors.status.info.main);
+  root.style.setProperty('--color-info-light', base.colors.status.info.light);
+  
+  // Apply RGBA color values for opacity variants
+  root.style.setProperty('--color-error-rgb', '229, 9, 20');
+  root.style.setProperty('--color-success-rgb', '0, 200, 83');
+  root.style.setProperty('--color-warning-rgb', '255, 160, 0');
+  root.style.setProperty('--color-info-rgb', '0, 113, 235');
+  
+  // Apply other UI elements
+  root.style.setProperty('--color-divider', colors.divider);
+  root.style.setProperty('--color-backdrop', colors.backdrop);
+  
+  // Apply typography
+  root.style.setProperty('--font-family', base.typography.fontFamily);
+  
+  // Apply border radius
+  root.style.setProperty('--border-radius-sm', base.borderRadius.sm);
+  root.style.setProperty('--border-radius-md', base.borderRadius.md);
+  root.style.setProperty('--border-radius-lg', base.borderRadius.lg);
+  
+  // Apply shadow
+  root.style.setProperty('--shadow-sm', base.shadows.sm);
+  root.style.setProperty('--shadow-md', base.shadows.md);
+  root.style.setProperty('--shadow-lg', base.shadows.lg);
+  
+  // Apply animations
+  root.style.setProperty('--transition-standard', 
+    `all ${base.animation.durations.normal} ${base.animation.easings.standard}`);
+}
+
 export default appTheme;

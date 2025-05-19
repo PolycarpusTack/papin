@@ -10,6 +10,32 @@ Papin is a cross-platform desktop application that provides access to the MCP sy
 - **Backend**: Rust with Tauri
 - **Bridge**: Tauri commands for communication between frontend and backend
 
+## Project Roadmap and JIRA Overview
+
+### Current Project Roadmap
+- Implement core offline AI capabilities
+- Enhance performance optimization system
+- Develop comprehensive observability infrastructure
+- Expand cross-platform support and compatibility
+- Implement advanced security features
+
+### JIRA Project Structure
+- **Epics**: Major project milestones and architectural improvements
+- **Stories**: Specific feature implementations and enhancements
+- **Sprints**: 2-week iterative development cycles
+- **Boards**: 
+  - Backend Development
+  - Frontend Development
+  - DevOps and Infrastructure
+  - AI and Offline Capabilities
+
+### Key JIRA Tracking Areas
+- Performance benchmarks and optimization
+- Offline system development
+- Security enhancements
+- Cross-platform compatibility
+- AI integration and local model support
+
 ## Common Commands
 
 ### Build Commands

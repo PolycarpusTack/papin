@@ -1,0 +1,239 @@
+/* Message content styles */
+.message-content-markdown {
+  width: 100%;
+  overflow: auto;
+  line-height: 1.5;
+}
+
+/* Handling markdown content */
+.message-content-markdown p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.message-content-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.message-content-markdown h1,
+.message-content-markdown h2,
+.message-content-markdown h3,
+.message-content-markdown h4,
+.message-content-markdown h5,
+.message-content-markdown h6 {
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.message-content-markdown ul,
+.message-content-markdown ol {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.message-content-markdown li {
+  margin-bottom: 0.25rem;
+}
+
+.message-content-markdown blockquote {
+  padding: 0.5rem 1rem;
+  border-left: 4px solid var(--color-primary-light);
+  background-color: rgba(0, 0, 0, 0.05);
+  margin: 1rem 0;
+}
+
+.message-content-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+.message-content-markdown a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.message-content-markdown a:hover {
+  text-decoration: underline;
+}
+
+/* Tables */
+.message-content-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.message-content-markdown th {
+  background-color: var(--color-surface-variant);
+  font-weight: 600;
+  text-align: left;
+}
+
+.message-content-markdown th,
+.message-content-markdown td {
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
+.message-content-markdown tr:nth-child(even) {
+  background-color: var(--color-surface);
+}
+
+/* Code blocks */
+.code-block-wrapper {
+  position: relative;
+  margin: 1rem 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background-color: var(--color-code-background);
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  background-color: var(--color-code-header);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.code-language {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-on-surface-variant);
+}
+
+.copy-code-button {
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-on-surface-variant);
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.copy-code-button:hover {
+  color: var(--color-on-surface);
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.message-content-markdown pre {
+  margin: 0;
+  border-radius: 0;
+  background-color: var(--color-code-background);
+  overflow-x: auto;
+}
+
+.message-content-markdown pre code {
+  display: block;
+  padding: 1rem;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--color-code-text);
+}
+
+.message-content-markdown code:not(pre code) {
+  font-family: var(--font-family-mono);
+  font-size: 0.9em;
+  background-color: var(--color-code-inline-bg);
+  padding: 0.2em 0.4em;
+  border-radius: var(--radius-sm);
+  color: var(--color-code-inline-text);
+}
+
+/* Horizontal rule */
+.message-content-markdown hr {
+  height: 1px;
+  background-color: var(--color-border);
+  border: none;
+  margin: 1.5rem 0;
+}
+
+/* System and user message content */
+.message-content-text,
+.message-content-system {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-content-system {
+  font-style: italic;
+}
+
+/* Highlight.js theme overrides (adapted for light/dark theme) */
+.hljs {
+  background: var(--color-code-background);
+  color: var(--color-code-text);
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-title,
+.hljs-section,
+.hljs-doctag,
+.hljs-name,
+.hljs-strong {
+  color: var(--color-code-keyword);
+}
+
+.hljs-string,
+.hljs-attr,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-regexp,
+.hljs-link {
+  color: var(--color-code-string);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--color-code-comment);
+  font-style: italic;
+}
+
+.hljs-number,
+.hljs-literal {
+  color: var(--color-code-number);
+}
+
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--color-code-variable);
+}
+
+.hljs-tag,
+.hljs-meta {
+  color: var(--color-code-tag);
+}
+
+.hljs-tag .hljs-attr {
+  color: var(--color-code-attr);
+}
+
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-type,
+.hljs-params {
+  color: var(--color-code-builtin);
+}
+
+.hljs-addition {
+  background-color: var(--color-code-addition);
+}
+
+.hljs-deletion {
+  background-color: var(--color-code-deletion);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}

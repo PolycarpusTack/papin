@@ -10,6 +10,7 @@ export default defineConfig(async () => ({
   server: {
     port: 3000,
     strictPort: true,
+    historyApiFallback: true,
   },
   build: {
     // Tauri uses Chromium on Windows and WebKit on macOS and Linux

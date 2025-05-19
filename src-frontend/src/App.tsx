@@ -3,9 +3,11 @@
 // Main application entry point
 
 import React, { useState, useEffect } from 'react';
+// No need for BrowserRouter here as it's in main.tsx
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { ThemeProvider as LegacyThemeProvider } from './components/theme/ThemeProvider';
 import { ThemeProvider as PlatformThemeProvider } from './components/ThemeProvider';
+import ErrorBoundary from './components/ErrorBoundary';
 import AppRoutes from './Routes';
 import { appTheme, globalStyles } from './styles/theme';
 
@@ -39,7 +41,9 @@ export function App() {
             <style>
               {globalStyles}
             </style>
-            <AppRoutes />
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
           </div>
         </StyledThemeProvider>
       </LegacyThemeProvider>

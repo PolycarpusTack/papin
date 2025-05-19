@@ -1,23 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { ModelManager, ModelInfo, Provider } from '../../api/ModelManager';
+import React, { useState, useEffect, useRef } from 'react';
+import modelManager, { Model, Provider, StorageInfo, ModelFilter as ModelFilterType } from '../../api/EnhancedModelManager';
+import ModelList from './ModelList';
+import ProviderList from './ProviderList';
+import StorageUsage from './StorageUsage';
+import ModelFilterComponent from './ModelFilterComponent';
+import './ModelManagement.css';
 
 /**
  * ModelManagement Component
  * 
- * Demonstrates the usage of the ModelManager API to interact with LLM models
- * Includes features for listing models, downloading, viewing status, and more
+ * Comprehensive UI for managing LLM models:
+ * - Provider selection
+ * - Model filtering and searching
+ * - Model downloading and deletion
+ * - Storage management
  */
 const ModelManagement: React.FC = () => {
-  // State for data
+  // Mounted ref to track component lifecycle
+  const isMountedRef = useRef<boolean>(false);
+  
+  // Providers state
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [activeProvider, setActiveProvider] = useState<string>('');
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [downloadedModels, setDownloadedModels] = useState<ModelInfo[]>([]);
+  const [activeProviderId, setActiveProviderId] = useState<string>('');
+  
+  // Models state
+  const [allModels, setAllModels] = useState<Model[]>([]);
+  const [filteredModels, setFilteredModels] = useState<Model[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  
+  // Filter state
+  const [filter, setFilter] = useState<ModelFilterType>({});
+  
+  // UI state
+  const [activeTab, setActiveTab] = useState<'available' | 'installed'>('installed');
   const [downloading, setDownloading] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState<boolean>(false);
+  const [importPath, setImportPath] = useState<string>('');
+  
+  // Unsubscribe functions
+  const [unsubscribeFns, setUnsubscribeFns] = useState<(() => void)[]>([]);
 
-  // Load providers and models on component mount
+  // Load initial data
   useEffect(() => {
     async function loadData() {
       try {
@@ -25,23 +52,38 @@ const ModelManagement: React.FC = () => {
         setError(null);
 
         // Get providers
-        const providerList = await ModelManager.getProviders();
+        const providerList = await modelManager.getProviders();
         setProviders(providerList);
         
         // Get active provider
-        const active = await ModelManager.getActiveProvider();
-        setActiveProvider(active);
+        const activeProvider = await modelManager.getActiveProvider();
+        if (activeProvider) {
+          setActiveProviderId(activeProvider.id);
+        }
         
-        // Get available models
-        const availableModels = await ModelManager.listAvailableModels();
-        setModels(availableModels);
+        // Get all models
+        const models = await modelManager.getAllModels();
+        setAllModels(models);
+        setFilteredModels(models);
         
-        // Get downloaded models
-        const installedModels = await ModelManager.listDownloadedModels();
-        setDownloadedModels(installedModels);
+        // Get storage info
+        const storage = await modelManager.getStorageInfo();
+        if (storage) {
+          setStorageInfo(storage);
+        }
         
         // Register for model events
-        const unlisteners = await ModelManager.registerModelEvents(
+        const unsubscribeModelEvents = await modelManager.subscribeToModelEvents(
+          (eventType, modelId, data) => {
+            if (eventType === 'added' || eventType === 'removed' || eventType === 'updated') {
+              // Refresh model list
+              refreshModels();
+            }
+          }
+        );
+        
+        // Register for download events
+        const unsubscribeDownloadEvents = await modelManager.subscribeToDownloadEvents(
           // Progress handler
           (modelId, progress) => {
             setDownloading(prev => ({
@@ -56,9 +98,9 @@ const ModelManagement: React.FC = () => {
               delete newState[modelId];
               return newState;
             });
-            
             // Refresh model lists to show downloaded status
             refreshModels();
+            refreshStorageInfo();
           },
           // Error handler
           (modelId, errorMsg) => {
@@ -71,10 +113,8 @@ const ModelManagement: React.FC = () => {
           }
         );
         
-        // Clean up event listeners when component unmounts
-        return () => {
-          unlisteners.forEach(fn => fn());
-        };
+        // Store unsubscribe functions
+        setUnsubscribeFns([unsubscribeModelEvents, unsubscribeDownloadEvents]);
       } catch (err) {
         setError(String(err));
       } finally {
@@ -83,49 +123,157 @@ const ModelManagement: React.FC = () => {
     }
     
     loadData();
-  }, []);
-
-  // Refresh model lists
+    
+    // Set mounted ref
+    isMountedRef.current = true;
+    
+    // Cleanup on unmount
+    return () => {
+      isMountedRef.current = false;
+      unsubscribeFns.forEach(fn => fn());
+    };
+  }, [unsubscribeFns]);
+  
+  // Apply filters to models when filter changes
+  useEffect(() => {
+    applyFilters();
+  }, [filter, allModels, activeTab]);
+  
+  // Filter models based on current filter
+  const applyFilters = () => {
+    let filtered = [...allModels];
+    
+    // Filter by installed status based on active tab
+    filtered = filtered.filter(model => 
+      activeTab === 'installed' ? model.isInstalled : true
+    );
+    
+    // Apply search query
+    if (filter.searchQuery) {
+      const query = filter.searchQuery.toLowerCase();
+      filtered = filtered.filter(model => 
+        model.name.toLowerCase().includes(query) || 
+        model.description.toLowerCase().includes(query)
+      );
+    }
+    
+    // Filter by provider
+    if (filter.providerId) {
+      filtered = filtered.filter(model => model.provider === filter.providerId);
+    }
+    
+    // Filter by installed state
+    if (filter.isInstalled !== undefined) {
+      filtered = filtered.filter(model => model.isInstalled === filter.isInstalled);
+    }
+    
+    // Filter by architecture
+    if (filter.architecture && filter.architecture.length > 0) {
+      filtered = filtered.filter(model => 
+        filter.architecture?.includes(model.architecture)
+      );
+    }
+    
+    // Filter by format
+    if (filter.format && filter.format.length > 0) {
+      filtered = filtered.filter(model => 
+        filter.format?.includes(model.format)
+      );
+    }
+    
+    // Filter by quantization
+    if (filter.quantization && filter.quantization.length > 0) {
+      filtered = filtered.filter(model => 
+        filter.quantization?.includes(model.quantization)
+      );
+    }
+    
+    // Filter by capabilities
+    if (filter.capabilities) {
+      if (filter.capabilities.textGeneration) {
+        filtered = filtered.filter(model => model.capabilities.textGeneration);
+      }
+      if (filter.capabilities.chat) {
+        filtered = filtered.filter(model => model.capabilities.chat);
+      }
+      if (filter.capabilities.embeddings) {
+        filtered = filtered.filter(model => model.capabilities.embeddings);
+      }
+      if (filter.capabilities.imageGeneration) {
+        filtered = filtered.filter(model => model.capabilities.imageGeneration);
+      }
+    }
+    
+    // Filter by context length
+    if (filter.minContextLength) {
+      filtered = filtered.filter(model => model.contextLength >= (filter.minContextLength || 0));
+    }
+    
+    // Filter by size
+    if (filter.maxSizeMb) {
+      filtered = filtered.filter(model => model.sizeMb <= (filter.maxSizeMb || Infinity));
+    }
+    
+    setFilteredModels(filtered);
+  };
+  
+  // Refresh models
   const refreshModels = async () => {
     try {
-      const availableModels = await ModelManager.listAvailableModels();
-      setModels(availableModels);
+      const models = await modelManager.getAllModels();
+      setAllModels(models);
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+  
+  // Refresh storage info
+  const refreshStorageInfo = async () => {
+    try {
+      const storage = await modelManager.getStorageInfo();
+      if (storage) {
+        setStorageInfo(storage);
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+  
+  // Handle provider selection
+  const handleProviderSelect = async (providerId: string) => {
+    try {
+      await modelManager.setActiveProvider(providerId);
+      setActiveProviderId(providerId);
       
-      const installedModels = await ModelManager.listDownloadedModels();
-      setDownloadedModels(installedModels);
-    } catch (err) {
-      setError(String(err));
-    }
-  };
-
-  // Set active provider
-  const handleSetActiveProvider = async (providerType: string) => {
-    try {
-      await ModelManager.setActiveProvider(providerType);
-      setActiveProvider(providerType);
-      refreshModels();
-    } catch (err) {
-      setError(String(err));
-    }
-  };
-
-  // Download a model
-  const handleDownloadModel = async (modelId: string) => {
-    try {
-      await ModelManager.downloadModel(modelId);
-      setDownloading(prev => ({
+      // Update filter to include the selected provider
+      setFilter(prev => ({
         ...prev,
-        [modelId]: 0
+        providerId
       }));
     } catch (err) {
       setError(String(err));
     }
   };
-
-  // Cancel a download
+  
+  // Handle model download
+  const handleDownloadModel = async (modelId: string) => {
+    try {
+      const success = await modelManager.downloadModel(modelId);
+      if (success) {
+        setDownloading(prev => ({
+          ...prev,
+          [modelId]: 0
+        }));
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+  
+  // Handle cancel download
   const handleCancelDownload = async (modelId: string) => {
     try {
-      await ModelManager.cancelDownload(modelId);
+      await modelManager.cancelDownload(modelId);
       setDownloading(prev => {
         const newState = { ...prev };
         delete newState[modelId];
@@ -135,143 +283,254 @@ const ModelManagement: React.FC = () => {
       setError(String(err));
     }
   };
-
-  // Delete a model
+  
+  // Handle delete model
   const handleDeleteModel = async (modelId: string) => {
     try {
-      await ModelManager.deleteModel(modelId);
+      await modelManager.deleteModel(modelId);
       refreshModels();
+      refreshStorageInfo();
     } catch (err) {
       setError(String(err));
     }
   };
-
-  // Format bytes to human-readable size
-  const formatBytes = (bytes: number, decimals = 2): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  
+  // Handle model import
+  const handleImportModel = async () => {
+    if (!importPath) return;
+    
+    try {
+      const importId = `imported-${Date.now()}`;
+      const model = await modelManager.importModel(importPath, importId);
+      if (model) {
+        setImportDialogOpen(false);
+        setImportPath('');
+        refreshModels();
+        refreshStorageInfo();
+      }
+    } catch (err) {
+      setError(`Import failed: ${String(err)}`);
+    }
   };
-
-  if (loading) {
-    return <div className="p-4">Loading model information...</div>;
-  }
-
-  return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Model Management</h1>
-      
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-      
-      {/* Provider selection */}
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold mb-2">LLM Providers</h2>
-        <div className="flex flex-wrap gap-2">
-          {providers.map(provider => (
-            <button
-              key={provider.provider_type}
-              className={`px-4 py-2 rounded ${activeProvider === provider.provider_type 
-                ? 'bg-blue-500 text-white' 
-                : 'bg-gray-200 hover:bg-gray-300'}`}
-              onClick={() => handleSetActiveProvider(provider.provider_type)}
+  
+  // Handle storage cleanup
+  const handleCleanupStorage = async () => {
+    try {
+      const bytesFreed = await modelManager.cleanupUnusedModels(30); // Clean models not used in 30 days
+      refreshStorageInfo();
+      if (bytesFreed > 0) {
+        const freedMb = Math.round(bytesFreed / 1024 / 1024);
+        setSuccessMessage(`Successfully freed ${freedMb} MB of storage space.`);
+      } else {
+        setSuccessMessage('No unused models found to clean up.');
+      }
+    } catch (err) {
+      setError(`Cleanup failed: ${String(err)}`);
+    }
+  };
+  
+  // Handle filter changes
+  const handleFilterChange = (newFilter: ModelFilterType) => {
+    setFilter(newFilter);
+  };
+  
+  // Handle tab change
+  const handleTabChange = (tab: 'available' | 'installed') => {
+    setActiveTab(tab);
+  };
+  
+  // Render alerts
+  const renderAlerts = () => {
+    return (
+      <>
+        {error && (
+          <div className="error-alert">
+            <p>{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="error-dismiss"
+              aria-label="Dismiss error"
             >
-              {provider.name}
+              Dismiss
             </button>
-          ))}
-        </div>
-      </div>
-      
-      {/* Downloaded models section */}
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold mb-2">Downloaded Models</h2>
-        {downloadedModels.length === 0 ? (
-          <p className="text-gray-500">No models downloaded yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {downloadedModels.map(model => (
-              <div key={model.id} className="border rounded p-3 flex justify-between items-center">
-                <div>
-                  <div className="font-medium">{model.name}</div>
-                  <div className="text-sm text-gray-500">
-                    {formatBytes(model.size_bytes)} • {model.provider}
-                  </div>
-                </div>
-                <button
-                  className="px-3 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200"
-                  onClick={() => handleDeleteModel(model.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
           </div>
         )}
+        
+        {successMessage && (
+          <div className="success-alert">
+            <p>{successMessage}</p>
+            <button 
+              onClick={() => setSuccessMessage(null)}
+              className="success-dismiss"
+              aria-label="Dismiss message"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </>
+    );
+  };
+  
+  // Handle keydown for import dialog
+  const handleImportDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setImportDialogOpen(false);
+    } else if (e.key === 'Enter' && importPath) {
+      handleImportModel();
+    }
+  };
+  
+  // Render import dialog
+  const renderImportDialog = () => {
+    if (!importDialogOpen) return null;
+    
+    return (
+      <div 
+        className="import-dialog-overlay"
+        onClick={(e) => {
+          // Close when clicking the overlay
+          if (e.target === e.currentTarget) {
+            setImportDialogOpen(false);
+          }
+        }}
+      >
+        <div 
+          className="import-dialog"
+          role="dialog"
+          aria-labelledby="import-dialog-title"
+          aria-describedby="import-dialog-description"
+          onKeyDown={handleImportDialogKeyDown}
+          tabIndex={-1}
+        >
+          <h3 id="import-dialog-title">Import Model</h3>
+          <p id="import-dialog-description">Enter the path to the model file you want to import:</p>
+          <input 
+            type="text" 
+            value={importPath}
+            onChange={(e) => setImportPath(e.target.value)}
+            placeholder="/path/to/model.gguf"
+            className="import-input"
+            autoFocus
+          />
+          <div className="import-actions">
+            <button
+              onClick={() => setImportDialogOpen(false)}
+              className="cancel-button"
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleImportModel}
+              className="import-button"
+              disabled={!importPath}
+              aria-disabled={!importPath ? 'true' : 'false'}
+              type="button"
+            >
+              Import
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  return (
+    <div className="model-management">
+      {renderAlerts()}
+      {renderImportDialog()}
+      
+      <div className="model-management-header">
+        <h1>Model Management</h1>
+        <div className="header-actions">
+          <button
+            onClick={() => setImportDialogOpen(true)}
+            className="import-model-button"
+          >
+            Import Model
+          </button>
+        </div>
       </div>
       
-      {/* Available models section */}
-      <div>
-        <h2 className="text-lg font-semibold mb-2">Available Models</h2>
-        <div className="space-y-3">
-          {models
-            .filter(model => !model.is_downloaded)
-            .map(model => (
-              <div key={model.id} className="border rounded p-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-medium">{model.name}</div>
-                    <div className="text-sm text-gray-500">
-                      {formatBytes(model.size_bytes)} • {model.provider}
-                    </div>
-                  </div>
-                  
-                  {downloading[model.id] !== undefined ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-32 bg-gray-200 rounded-full h-2.5">
-                        <div 
-                          className="bg-blue-600 h-2.5 rounded-full" 
-                          style={{ width: `${downloading[model.id] * 100}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm">{Math.round(downloading[model.id] * 100)}%</span>
-                      <button
-                        className="px-3 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200"
-                        onClick={() => handleCancelDownload(model.id)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      className="px-3 py-1 bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
-                      onClick={() => handleDownloadModel(model.id)}
-                    >
-                      Download
-                    </button>
-                  )}
-                </div>
-                
-                {model.description && (
-                  <div className="mt-2 text-sm">{model.description}</div>
-                )}
-                
-                {model.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {model.tags.map(tag => (
-                      <span key={tag} className="px-2 py-0.5 bg-gray-100 text-xs rounded">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+      <div className="model-management-layout">
+        {/* Sidebar */}
+        <div className="model-management-sidebar">
+          <h2 className="sidebar-title">Providers</h2>
+          <ProviderList
+            providers={providers}
+            activeProviderId={activeProviderId}
+            onSelectProvider={handleProviderSelect}
+            isLoading={loading}
+          />
+          
+          {storageInfo && (
+            <StorageUsage
+              storageInfo={storageInfo}
+              isLoading={loading}
+              onCleanupStorage={handleCleanupStorage}
+            />
+          )}
+        </div>
+        
+        {/* Main content */}
+        <div className="model-management-content">
+          {/* Tab navigation */}
+          <div className="model-tabs" role="tablist" aria-label="Model categories">
+            <button
+              role="tab"
+              id="tab-installed"
+              aria-controls="panel-installed"
+              aria-selected={activeTab === 'installed'}
+              className={`tab-button ${activeTab === 'installed' ? 'active' : ''}`}
+              onClick={() => handleTabChange('installed')}
+            >
+              Installed Models
+            </button>
+            <button
+              role="tab"
+              id="tab-available"
+              aria-controls="panel-available"
+              aria-selected={activeTab === 'available'}
+              className={`tab-button ${activeTab === 'available' ? 'active' : ''}`}
+              onClick={() => handleTabChange('available')}
+            >
+              Available Models
+            </button>
+          </div>
+          
+          {/* Filter section */}
+          <ModelFilterComponent
+            onFilterChange={handleFilterChange}
+            initialFilter={filter}
+            showProviderFilter={true}
+            providers={providers.map(p => ({ id: p.id, name: p.name }))}
+          />
+          
+          {/* Model list */}
+          <div 
+            className="model-list-container"
+            role="tabpanel"
+            id={`panel-${activeTab}`}
+            aria-labelledby={`tab-${activeTab}`}
+          >
+            <ModelList
+              models={filteredModels}
+              isLoading={loading}
+              onDownload={handleDownloadModel}
+              onDelete={handleDeleteModel}
+              onCancelDownload={handleCancelDownload}
+              downloadProgress={downloading}
+              selectedModelId={selectedModelId || undefined}
+              onSelectModel={(id) => setSelectedModelId(id)}
+              showActions={true}
+              emptyMessage={
+                activeTab === 'installed' 
+                  ? "No installed models found. Go to 'Available Models' to download some."
+                  : "No available models found with current filters."
+              }
+            />
+          </div>
         </div>
       </div>
     </div>
