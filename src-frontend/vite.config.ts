@@ -10,7 +10,12 @@ export default defineConfig(async () => ({
   server: {
     port: 3000,
     strictPort: true,
-    historyApiFallback: true,
+    hmr: false, // Disable HMR completely
+  },
+  // Enable SPA routing support
+  preview: {
+    port: 3000,
+    strictPort: true,
   },
   build: {
     // Tauri uses Chromium on Windows and WebKit on macOS and Linux
